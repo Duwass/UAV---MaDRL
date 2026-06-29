@@ -1,0 +1,87 @@
+\begin{thebibliography}{10}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Gong and TODO(2020)]{gong2020drlbackscattermec}
+TODO Gong and TODO.
+\newblock Deep reinforcement learning for backscatter-aided data offloading in
+  mobile edge computing.
+\newblock \emph{TODO}, 2020.
+\newblock TODO: verify authors, title, venue, pages, and DOI before final
+  submission.
+
+\bibitem[Huynh et~al.(2018)Huynh, Hoang, Niyato, Wang, and
+  Kim]{huynh2018rfpowered}
+N.~Van Huynh, Dinh~Thai Hoang, Dusit Niyato, Ping Wang, and Dong~In Kim.
+\newblock Optimal time scheduling in rf-powered backscatter cognitive radio
+  networks.
+\newblock \emph{IEEE Transactions on Wireless Communications}, 2018.
+\newblock TODO: verify exact volume, issue, pages, and DOI.
+
+\bibitem[Mnih et~al.(2015)Mnih, Kavukcuoglu, Silver, Rusu, Veness, Bellemare,
+  Graves, Riedmiller, Fidjeland, Ostrovski, Petersen, Beattie, Sadik,
+  Antonoglou, King, Kumaran, Wierstra, Legg, and Hassabis]{mnih2015dqn}
+Volodymyr Mnih, Koray Kavukcuoglu, David Silver, Andrei~A. Rusu, Joel Veness,
+  Marc~G. Bellemare, Alex Graves, Martin Riedmiller, Andreas~K. Fidjeland,
+  Georg Ostrovski, Stig Petersen, Charles Beattie, Amir Sadik, Ioannis
+  Antonoglou, Helen King, Dharshan Kumaran, Daan Wierstra, Shane Legg, and
+  Demis Hassabis.
+\newblock Human-level control through deep reinforcement learning.
+\newblock \emph{Nature}, 518\penalty0 (7540):\penalty0 529--533, 2015.
+\newblock \doi{10.1038/nature14236}.
+
+\bibitem[Rashid et~al.(2018)Rashid, Samvelyan, Schroeder, Farquhar, Foerster,
+  and Whiteson]{rashid2018qmix}
+Tabish Rashid, Mikayel Samvelyan, Christian Schroeder, Gregory Farquhar, Jakob
+  Foerster, and Shimon Whiteson.
+\newblock {QMIX}: Monotonic value function factorisation for deep multi-agent
+  reinforcement learning.
+\newblock In \emph{Proceedings of the 35th International Conference on Machine
+  Learning}, pages 4295--4304, 2018.
+\newblock TODO: verify proceedings volume metadata.
+
+\bibitem[Sutton and Barto(2018)]{sutton2018reinforcement}
+Richard~S. Sutton and Andrew~G. Barto.
+\newblock \emph{Reinforcement Learning: An Introduction}.
+\newblock MIT Press, 2 edition, 2018.
+
+\bibitem[TODO(TODO{\natexlab{a}})]{anti_jamming_todo}
+TODO.
+\newblock Todo: Anti-jamming wireless communication reference.
+\newblock \emph{TODO}, TODO{\natexlab{a}}.
+\newblock TODO: add a verified anti-jamming or mobile jamming reference.
+
+\bibitem[TODO(TODO{\natexlab{b}})]{hierarchical_rl_todo}
+TODO.
+\newblock Todo: Hierarchical reinforcement learning and action abstraction
+  reference.
+\newblock \emph{TODO}, TODO{\natexlab{b}}.
+\newblock TODO: add verified hierarchical RL/action abstraction reference if
+  used in final report.
+
+\bibitem[TODO(TODO{\natexlab{c}})]{uav_iot_survey_todo}
+TODO.
+\newblock Todo: Uav-assisted iot communications survey.
+\newblock \emph{TODO}, TODO{\natexlab{c}}.
+\newblock TODO: add a verified UAV-IoT or UAV communications survey.
+
+\bibitem[Tran and TODO(2018)]{tran2018ddqntimescheduling}
+TODO Tran and TODO.
+\newblock Deep reinforcement learning for time scheduling in rf-powered
+  backscatter cognitive radio networks.
+\newblock \emph{TODO}, 2018.
+\newblock TODO: verify exact bibliographic metadata; placeholder for
+  DDQN/time-scheduling backscatter reference.
+
+\bibitem[van Hasselt et~al.(2016)van Hasselt, Guez, and
+  Silver]{vanhasselt2016ddqn}
+Hado van Hasselt, Arthur Guez, and David Silver.
+\newblock Deep reinforcement learning with double q-learning.
+\newblock In \emph{Proceedings of the AAAI Conference on Artificial
+  Intelligence}, 2016.
+\newblock TODO: verify final page numbers and venue metadata.
+
+\end{thebibliography}

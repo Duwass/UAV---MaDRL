@@ -1,0 +1,37 @@
+env_config: configs/scenario_4_backscatter_types_calibrated.yaml
+training_interface:
+  type: hierarchical
+executor:
+  fairness_weight: 3.0
+  underserved_weight: 3.0
+  repeat_target_penalty: 1.0
+training:
+  total_episodes: 500
+  max_steps_per_episode: 200
+  eval_interval_episodes: 10
+  eval_episodes: 30
+  save_interval_episodes: 50
+  seed: 43
+qmix:
+  device: auto
+  use_agent_id: true
+  agent_hidden_sizes:
+  - 128
+  - 128
+  mixing_embed_dim: 32
+  hypernet_hidden_dim: 64
+  learning_rate: 0.0005
+  gamma: 0.99
+  batch_size: 16
+  replay_capacity: 5000
+  min_replay_size: 10
+  target_update_steps: 200
+  gradient_clip_norm: 10.0
+  epsilon_start: 1.0
+  epsilon_end: 0.05
+  epsilon_decay_steps: 25000
+  double_q: true
+  updates_per_episode: 1
+logging:
+  output_prefix: qmix_sc4_fair_w3_seed43
+  save_checkpoints: true

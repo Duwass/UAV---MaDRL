@@ -1,0 +1,33 @@
+env_config: configs/scenario_4_backscatter_types_calibrated.yaml
+
+training_interface:
+  type: hierarchical
+
+training:
+  total_episodes: 500
+  max_steps_per_episode: 200
+  eval_interval_episodes: 10
+  eval_episodes: 30
+  save_interval_episodes: 50
+  seed: 42
+
+ddqn:
+  device: auto
+  state_type: concat_global_local
+  network_type: standard
+  hidden_sizes: [256, 256]
+  learning_rate: 0.0005
+  gamma: 0.99
+  batch_size: 128
+  replay_capacity: 100000
+  min_replay_size: 2000
+  target_update_steps: 1000
+  gradient_clip_norm: 10.0
+  epsilon_start: 1.0
+  epsilon_end: 0.05
+  epsilon_decay_steps: 50000
+
+logging:
+  output_prefix: hier_sc4_slow_epsilon
+  save_frame_logs: false
+  save_checkpoints: true

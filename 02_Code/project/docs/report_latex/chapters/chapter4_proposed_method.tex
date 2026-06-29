@@ -1,0 +1,160 @@
+\chapter{Phương pháp đề xuất}
+
+\section{Tổng quan pipeline}
+
+Phương pháp được xây dựng theo ba bước. Thứ nhất, Flat DDQN được dùng như baseline học trực tiếp trên hành động nguyên thủy. Thứ hai, Hierarchical DDQN kiểm tra tác dụng của giao diện hành động mức cao. Thứ ba, QMIX-Hierarchical dùng cùng giao diện 10 hành động để học phối hợp nhiều UAV.
+
+Trọng tâm của phương pháp là giảm độ khó học bằng action abstraction. Trong Scenario 4, hành động nguyên thủy có 864 tổ hợp, còn hành động phân cấp chỉ có 10 lựa chọn mức cao. Hình \ref{fig:hier_action_arch} tóm tắt pipeline này.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.94\textwidth]{hierarchical_action_architecture.png}
+\caption{Giao diện hành động phân cấp. Tác tử học chọn một trong 10 hành động mức cao; executor dựa trên quy tắc chuyển hành động này thành bộ ba nguyên thủy gồm di chuyển, IoT mục tiêu và chế độ truyền thông.}
+\label{fig:hier_action_arch}
+\end{figure}
+
+\section{Flat DDQN baseline}
+
+Hành động phẳng của UAV \(u\) là:
+
+\begin{equation}
+a^u_t=(m^u_t,i^u_t,c^u_t),
+\label{eq:flat_action}
+\end{equation}
+
+trong đó \(m^u_t\) là lệnh di chuyển, \(i^u_t\) là IoT mục tiêu và \(c^u_t\) là chế độ truyền thông. Với 15 IoT, số hành động là 864. DDQN dùng mục tiêu Double-DQN:
+
+\begin{equation}
+y_t=r_t+\gamma(1-d_t)Q^{-}\!\left(s_{t+1},
+\arg\max_{a'}Q(s_{t+1},a')\right).
+\label{eq:ddqn_target}
+\end{equation}
+
+Flat DDQN giữ nguyên ngữ nghĩa hành động của mô phỏng nên là baseline cần thiết. Tuy nhiên, nhiều hành động phẳng không hợp lệ hoặc ít giá trị trong từng trạng thái, làm việc học kém hiệu quả.
+
+\section{Trừu tượng hóa hành động phân cấp}
+
+Thay vì chọn \(a^u_t\), UAV chọn hành động mức cao:
+
+\begin{equation}
+z^u_t\in\mathcal{Z},\quad |\mathcal{Z}|=10.
+\label{eq:high_action}
+\end{equation}
+
+Bảng \ref{tab:high_level_actions} liệt kê mười hành động mức cao được dùng trong executor.
+
+\begin{table}[H]
+\centering
+\caption{Mười hành động mức cao trong executor phân cấp.}
+\label{tab:high_level_actions}
+\small
+\begin{tabularx}{\textwidth}{clX}
+\toprule
+ID & Hành động & Hành vi chính \\
+\midrule
+0 & IDLE\_SAFE & Nghỉ hoặc chỉ truyền khi cơ hội đủ an toàn. \\
+1 & SERVE\_NEAREST\_QUEUE & Phục vụ IoT gần nhất có hàng đợi. \\
+2 & SERVE\_BEST\_SINR & Ưu tiên IoT có SINR tốt. \\
+3 & PRIORITIZE\_BACKSCATTER\_TYPE23 & Ưu tiên Type 2/3 và backscatter. \\
+4 & PRIORITIZE\_ACTIVE\_TYPE1 & Ưu tiên Type 1 và active. \\
+5 & HARVEST\_LOW\_ENERGY & Hỗ trợ thiết bị năng lượng thấp và harvest. \\
+6 & AVOID\_JAMMER & Tránh jammer và giảm rủi ro nhiễu. \\
+7 & BALANCE\_UNDERSERVED\_IOT & Ưu tiên thiết bị được phục vụ ít. \\
+8 & HYBRID\_BALANCED & Kết hợp hàng đợi, SINR, loại thiết bị, fairness và jammer risk. \\
+9 & HIGH\_QUEUE\_PRIORITY & Ưu tiên áp lực hàng đợi cao. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Executor thực hiện ánh xạ:
+
+\begin{equation}
+\phi_{\mathrm{exec}}:(\mathbf{z}_t,s_t)\mapsto \mathbf{a}_t.
+\label{eq:executor_mapping}
+\end{equation}
+
+Executor là rule-based, không phải mạng học. Nó dùng thông tin môi trường như vị trí UAV/IoT, hàng đợi, năng lượng, loại thiết bị, primary busy, jammer và điểm SINR để chọn hành động nguyên thủy. Đây là ưu điểm về tri thức miền nhưng cũng là một giới hạn cần nêu rõ.
+
+\section{Hierarchical DDQN}
+
+Hierarchical DDQN giữ cấu trúc DDQN nhưng đầu ra là \(z^u_t\in\mathcal{Z}\). Trạng thái đầu vào là kết hợp giữa global state và local observation. Action mask được áp dụng trước epsilon-greedy để tránh chọn hành động mức cao không hợp lệ hoặc bị vô hiệu hóa. Phương pháp này được dùng để kiểm tra giả thuyết: nút thắt chính của Flat DDQN là giao diện hành động, không chỉ là kiến trúc mạng.
+
+\section{QMIX-Hierarchical}
+
+QMIX-Hierarchical là phương pháp MaDRL chính. Mỗi UAV là một tác tử, nhận quan sát cục bộ \(o^u_t\) và chọn hành động mức cao \(z^u_t\). Mạng agent chia sẻ tham số ước lượng:
+
+\begin{equation}
+Q_u(o^u_t,z^u_t;\theta).
+\label{eq:agent_q}
+\end{equation}
+
+Mixer nhận các giá trị agent đã chọn và trạng thái toàn cục:
+
+\begin{equation}
+Q_{\mathrm{tot}}(s_t,\mathbf{z}_t)
+=f_{\mathrm{mix}}(Q_1,\ldots,Q_U,s_t;\psi).
+\label{eq:qmix_mixer}
+\end{equation}
+
+QMIX áp đặt ràng buộc đơn điệu:
+
+\begin{equation}
+\frac{\partial Q_{\mathrm{tot}}}{\partial Q_u}\ge 0,\quad \forall u.
+\label{eq:qmix_monotonic}
+\end{equation}
+
+Hình \ref{fig:qmix_arch} mô tả cấu trúc huấn luyện và thực thi.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{qmix_architecture.png}
+\caption{QMIX-Hierarchical. Trong huấn luyện, mixer sử dụng trạng thái toàn cục và phần thưởng chung để học \(Q_{\mathrm{tot}}\). Trong đánh giá, mỗi UAV chọn hành động mức cao từ quan sát cục bộ, sau đó executor chuyển sang hành động nguyên thủy.}
+\label{fig:qmix_arch}
+\end{figure}
+
+\section{Huấn luyện và thực thi}
+
+QMIX được huấn luyện tập trung: replay buffer lưu trajectory chung, mixer dùng global state, và phần thưởng là phần thưởng mạng. Chọn hành động mức cao mang tính cục bộ: mỗi UAV dùng quan sát của mình và agent id để tính Q-value trên 10 hành động.
+
+Điểm cần nhấn mạnh là quá trình thực thi nguyên thủy không hoàn toàn phi tập trung, vì executor vẫn dùng thông tin môi trường để ánh xạ hành động mức cao. Do đó, báo cáo dùng cách diễn đạt: decentralized high-level action selection with a rule-based executor.
+
+Mục tiêu TD của QMIX:
+
+\begin{equation}
+y_t=r_t+\gamma(1-d_t)Q_{\mathrm{tot}}^{-}(s_{t+1},\mathbf{z}^{*}_{t+1}),
+\label{eq:qmix_target}
+\end{equation}
+
+và hàm mất mát:
+
+\begin{equation}
+\mathcal{L}=
+\frac{\sum_{b,t}M_{b,t}\left(Q_{\mathrm{tot}}(s_{b,t},\mathbf{z}_{b,t})-y_{b,t}\right)^2}
+{\sum_{b,t}M_{b,t}}.
+\label{eq:qmix_loss}
+\end{equation}
+
+\section{Pseudocode tóm tắt}
+
+\begin{algorithm}[H]
+\caption{Huấn luyện QMIX-Hierarchical}
+\label{alg:qmix_short}
+\begin{algorithmic}[1]
+\State Khởi tạo môi trường, wrapper phân cấp, agent network và mixer.
+\For{mỗi episode}
+  \State Reset môi trường, tạo trajectory rỗng.
+  \For{mỗi frame}
+    \For{mỗi UAV \(u\)}
+      \State Tính \(Q_u(o^u_t,\cdot)\), áp dụng action mask và chọn \(z^u_t\).
+    \EndFor
+    \State Executor ánh xạ \(\mathbf{z}_t\) thành \(\mathbf{a}_t\); môi trường trả về \(r_t\).
+    \State Lưu observation, state, action, reward, mask và next state vào trajectory.
+  \EndFor
+  \State Cập nhật agent network và mixer bằng \eqref{eq:qmix_loss} nếu replay đủ lớn.
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\section{Tóm tắt phương pháp}
+
+Flat DDQN kiểm tra giới hạn của điều khiển nguyên thủy. Hierarchical DDQN chứng minh rằng giảm hành động từ 864 xuống 10 làm bài toán khả học hơn. QMIX-Hierarchical là phương pháp MaDRL cuối cùng vì kết hợp action abstraction với value decomposition hợp tác giữa UAV. Các giới hạn gồm executor rule-based, backscatter abstraction và fairness chưa được giải quyết hoàn toàn.

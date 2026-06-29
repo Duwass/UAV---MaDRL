@@ -1,0 +1,16 @@
+\begin{tabular}{lllllll}
+\hline
+Section & Scenario / Metric & UAV count & IoT count & Jammer setting & Backscatter/active relevance & Purpose \\
+\hline
+Scenario & No-jammer calibrated & 1 & 5 & Disabled & Basic backscatter/active scheduling without jamming. & Learnability sanity check and no-jammer reference. \\
+Scenario & Static weak jammer & 2 & 10 & One weak static jammer & Anti-jamming behavior with moderate coordination. & Intermediate transfer and robustness validation. \\
+Scenario & Scenario 4 backscatter types & 2 & 15 & One calibrated mobile/chase jammer & Heterogeneous Type 1/2/3 devices with active, backscatter, and harvest modes. & Main heterogeneous RF-powered backscatter coordination benchmark. \\
+Metric & Throughput/frame &  &  &  &  & Delivered packets per frame; higher is better. \\
+Metric & Drop rate &  &  &  &  & Fraction of generated/queued packets dropped; lower is better. \\
+Metric & Jamming failure &  &  &  &  & Transmission failures attributed to jamming; lower is better. \\
+Metric & Fairness &  &  &  &  & Jain-style service fairness across IoT devices; higher is better. \\
+Metric & Energy efficiency &  &  &  &  & Delivered utility per energy cost; higher is better. \\
+Metric & Backscatter success &  &  &  &  & Successful backscatter transmission rate; higher is better. \\
+Metric & Active success &  &  &  &  & Successful active transmission rate; higher is better. \\
+\hline
+\end{tabular}

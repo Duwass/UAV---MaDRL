@@ -1,0 +1,15 @@
+\babel@toc {vietnamese}{}\relax 
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {3.1}{\ignorespaces Mô hình Scenario 4: hai UAV phục vụ mười lăm thiết bị IoT dị thể dưới tác động của một jammer di động. Backscatter được mô tả ở mức trừu tượng hệ thống thông qua trạng thái primary busy và hệ số công suất hiệu dụng.}}{12}{figure.caption.5}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {4.1}{\ignorespaces Giao diện hành động phân cấp. Tác tử học chọn một trong 10 hành động mức cao; executor dựa trên quy tắc chuyển hành động này thành bộ ba nguyên thủy gồm di chuyển, IoT mục tiêu và chế độ truyền thông.}}{16}{figure.caption.7}%
+\contentsline {figure}{\numberline {4.2}{\ignorespaces QMIX-Hierarchical. Trong huấn luyện, mixer sử dụng trạng thái toàn cục và phần thưởng chung để học \(Q_{\mathrm {tot}}\). Trong đánh giá, mỗi UAV chọn hành động mức cao từ quan sát cục bộ, sau đó executor chuyển sang hành động nguyên thủy.}}{18}{figure.caption.9}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {5.1}{\ignorespaces Throughput/frame của các baseline và phương pháp học trong Scenario 4. Hình này nhấn mạnh khoảng cách giữa Flat DDQN và các phương pháp dùng hành động phân cấp.}}{21}{figure.caption.12}%
+\contentsline {figure}{\numberline {5.2}{\ignorespaces So sánh drop rate, jamming failure và fairness. QMIX base giảm jamming failure và cải thiện fairness so với Hierarchical DDQN trong gói kết quả hiện có.}}{21}{figure.caption.13}%
+\contentsline {figure}{\numberline {5.3}{\ignorespaces Tiến trình kết quả: Flat DDQN cho thấy nút thắt không gian hành động; Hierarchical DDQN chứng minh hiệu quả action abstraction; QMIX thêm phối hợp đa tác tử.}}{22}{figure.caption.15}%
+\contentsline {figure}{\numberline {5.4}{\ignorespaces Mean/std của QMIX base trên ba seed. Throughput ổn định hơn so với các chỉ số phối hợp như jamming failure và fairness.}}{23}{figure.caption.17}%
+\contentsline {figure}{\numberline {5.5}{\ignorespaces Đánh đổi throughput--fairness trong các biến thể. fair\_w2 có throughput và jamming tốt hơn nhưng fairness trung bình thấp hơn QMIX base.}}{24}{figure.caption.19}%
+\contentsline {figure}{\numberline {5.6}{\ignorespaces Ablation công bằng theo nhóm chỉ số. Vô hiệu hóa hành động cân bằng làm giảm throughput/fairness và tăng jamming so với QMIX base.}}{24}{figure.caption.20}%

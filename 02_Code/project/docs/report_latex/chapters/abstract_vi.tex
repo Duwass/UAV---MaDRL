@@ -1,0 +1,10 @@
+\chapter*{Tóm tắt}
+\addcontentsline{toc}{chapter}{Tóm tắt}
+
+Mạng IoT hỗ trợ bởi thiết bị bay không người lái (UAV) là một hướng tiếp cận linh hoạt cho thu thập dữ liệu trong các khu vực thiếu hạ tầng hoặc có thiết bị IoT năng lượng hạn chế. Tuy nhiên, khi xuất hiện jammer di động, UAV phải đồng thời quyết định vị trí di chuyển, thiết bị cần phục vụ và chế độ truyền thông trong điều kiện kênh thay đổi, hàng đợi biến động và rủi ro gây nhiễu. Bài toán càng phức tạp hơn khi xem xét các thiết bị IoT có khả năng harvest, backscatter cảm hứng RF-powered và truyền active.
+
+Báo cáo này nghiên cứu bài toán điều khiển UAV-IoT chống gây nhiễu bằng học tăng cường sâu và học tăng cường đa tác tử. Thiết lập đánh giá cuối cùng sử dụng cấu hình mô phỏng đã triển khai gồm 2 UAV, 15 thiết bị IoT và 1 jammer di động, với frame length bằng 10 và episode length bằng 200. Trên cấu hình này, giao diện hành động nguyên thủy có 864 hành động, gây khó khăn cho Flat DDQN. Vì vậy, báo cáo sử dụng một giao diện hành động phân cấp gồm 10 hành động mức cao, sau đó một bộ thực thi dựa trên quy tắc ánh xạ hành động mức cao về hành động nguyên thủy.
+
+Các kết quả Phase 3 cho thấy Flat DDQN gặp khó khăn với giao diện 864 hành động, trong khi Hierarchical DDQN chứng minh rằng trừu tượng hóa hành động làm bài toán khả học hơn. Phương pháp cuối cùng được lựa chọn là QMIX-Hierarchical, trong đó mỗi UAV chọn hành động mức cao từ quan sát cục bộ, còn mạng trộn QMIX sử dụng trạng thái toàn cục và phần thưởng chung trong huấn luyện. QMIX-Hierarchical đạt hành vi hợp tác ổn định qua ba seed và cải thiện các chỉ số liên quan đến gây nhiễu/công bằng so với Hierarchical DDQN đơn chạy. Báo cáo diễn giải các kết quả một cách thận trọng: QMIX không được khẳng định vượt Hierarchical DDQN về thông lượng trung bình, fairness chưa được giải quyết triệt để, và mô hình backscatter là trừu tượng mức hệ thống chứ không phải xác thực vật lý đầy đủ.
+
+\clearpage

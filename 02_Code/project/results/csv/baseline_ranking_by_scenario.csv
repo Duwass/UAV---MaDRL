@@ -1,0 +1,26 @@
+scenario_name,rank,policy_name,avg_throughput_per_frame_mean,packet_drop_rate_mean,jamming_failure_rate_mean,fairness_index_mean,short_comment
+scenario_0_no_jammer,1,htt_only,0.4486666666666667,0.9720010426637392,0.0,0.33102220942216715,Balanced baseline performance
+scenario_0_no_jammer,2,greedy_sinr,0.35383333333333333,0.9758635443595222,0.0,0.43037442093681,Balanced baseline performance
+scenario_0_no_jammer,3,greedy_nearest,0.27283333333333337,0.9790695303549545,0.0,0.19999999999999993,Balanced baseline performance
+scenario_0_no_jammer,4,backscatter_only,0.24733333333333332,0.9800816059727377,0.0,0.1999999999999999,Energy efficient but low delivery
+scenario_0_no_jammer,5,random,0.062000000000000006,0.9875165348083176,0.0,0.4816629132563885,Energy efficient but low delivery
+scenario_1_multi_uav,1,htt_only,0.9179999999999999,0.9716732072027052,0.0,0.31857961337762297,Balanced baseline performance
+scenario_1_multi_uav,2,greedy_sinr,0.6938333333333334,0.9761241150353998,0.0,0.44652391375562145,Balanced baseline performance
+scenario_1_multi_uav,3,greedy_nearest,0.5326666666666667,0.9793688885451353,0.0,0.1997083682890897,Balanced baseline performance
+scenario_1_multi_uav,4,backscatter_only,0.5071666666666667,0.9799017892503308,0.0,0.19999397993320908,Energy efficient but low delivery
+scenario_1_multi_uav,5,random,0.1435,0.9871273352174578,0.0,0.554131113226287,Energy efficient but low delivery
+scenario_2_static_jammer,1,random,0.0435,0.9891282750726468,0.6705628564127843,0.2910960140567844,Best anti-jamming behavior
+scenario_2_static_jammer,2,htt_only,0.023666666666666666,0.9895183815362819,0.9739934815955108,0.14683291436232448,Balanced baseline performance
+scenario_2_static_jammer,3,greedy_nearest,0.004333333333333333,0.9898994642053565,0.9924267305108,0.5319999999999958,Balanced baseline performance
+scenario_2_static_jammer,4,backscatter_only,0.004166666666666667,0.9899053584799312,0.9916742475455383,0.5359999999999957,Energy efficient but low delivery
+scenario_2_static_jammer,5,greedy_sinr,0.0033333333333333335,0.9899167838013768,0.996481814776444,0.6759999999999978,Energy efficient but low delivery
+scenario_3_mobile_jammer,1,greedy_nearest,0.26716666666666666,0.9846936219910859,0.4951951558386693,0.16380122012950146,Balanced baseline performance
+scenario_3_mobile_jammer,2,backscatter_only,0.26016666666666666,0.9848207100042075,0.4742501287933119,0.1975684626181889,Best anti-jamming behavior
+scenario_3_mobile_jammer,3,htt_only,0.259,0.9848282699146063,0.7107725135209398,0.21866459826627874,Poor under mobile jammer
+scenario_3_mobile_jammer,4,greedy_sinr,0.14933333333333335,0.9870173952362538,0.782885818393662,0.3329887507870612,Poor under mobile jammer
+scenario_3_mobile_jammer,5,random,0.04883333333333333,0.9890147296489181,0.6216255319643677,0.36568329427308,Energy efficient but low delivery
+scenario_4_backscatter_types,1,htt_only,0.050666666666666665,0.9893200901919494,0.9428206813696562,0.33289853952733506,Balanced baseline performance
+scenario_4_backscatter_types,2,random,0.034166666666666665,0.9895390495533232,0.7176025923493954,0.24096304548886402,Best anti-jamming behavior
+scenario_4_backscatter_types,3,greedy_sinr,0.018000000000000002,0.9897591154715558,0.9774267647564719,0.5896505791247777,Balanced baseline performance
+scenario_4_backscatter_types,4,backscatter_only,0.0018333333333333333,0.9899785872953119,0.9962225019701426,0.6888888888888876,Energy efficient but low delivery
+scenario_4_backscatter_types,5,greedy_nearest,0.0013333333333333333,0.9899739507760361,0.9973267223371148,0.7822222222222214,Energy efficient but low delivery

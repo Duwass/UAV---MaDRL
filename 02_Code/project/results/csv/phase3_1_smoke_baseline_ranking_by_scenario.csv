@@ -1,0 +1,36 @@
+scenario_name,rank,policy_name,avg_throughput_per_frame_mean,packet_drop_rate_mean,jamming_failure_rate_mean,fairness_index_mean,short_comment
+scenario_0_no_jammer_calibrated,1,greedy_sinr,0.855,0.7742572544999696,0.0,0.45666951350088936,Balanced baseline performance
+scenario_0_no_jammer_calibrated,2,htt_only,0.83,0.7805487368494082,0.0,0.20351056580674717,Balanced baseline performance
+scenario_0_no_jammer_calibrated,3,greedy_nearest,0.645,0.8092318917463787,0.0,0.20416008028572977,Balanced baseline performance
+scenario_0_no_jammer_calibrated,4,backscatter_only,0.555,0.8225975766419994,0.0,0.20000000000000004,Energy efficient but low delivery
+scenario_0_no_jammer_calibrated,5,random,0.16166666666666665,0.8881838235216283,0.0,0.48637260618564326,Energy efficient but low delivery
+scenario_1_multi_uav_calibrated,1,htt_only,1.825,0.7699023556885262,0.0,0.20596565033950018,Balanced baseline performance
+scenario_1_multi_uav_calibrated,2,greedy_sinr,1.6449999999999998,0.7806073716568931,0.0,0.5413950723184809,Balanced baseline performance
+scenario_1_multi_uav_calibrated,3,greedy_nearest,1.2816666666666665,0.8116133887256055,0.0,0.22159515147430672,Balanced baseline performance
+scenario_1_multi_uav_calibrated,4,backscatter_only,1.08,0.8276682143204592,0.0,0.20119008979768474,Energy efficient but low delivery
+scenario_1_multi_uav_calibrated,5,random,0.315,0.891600308762754,0.0,0.5433062489907416,Energy efficient but low delivery
+scenario_2a_static_jammer_weak,1,htt_only,1.2716666666666667,0.8134596591803936,0.0,0.20144367662511586,Best anti-jamming behavior
+scenario_2a_static_jammer_weak,2,greedy_nearest,0.34833333333333333,0.8885583960680453,0.5896700930361519,0.14730539213447905,Balanced baseline performance
+scenario_2a_static_jammer_weak,3,greedy_sinr,0.28833333333333333,0.8924662658652035,0.8001115548102818,0.43552546952356,Balanced baseline performance
+scenario_2a_static_jammer_weak,4,backscatter_only,0.22666666666666668,0.8980982723585016,0.6272573423308717,0.1295449604073915,Energy efficient but low delivery
+scenario_2a_static_jammer_weak,5,random,0.12666666666666668,0.9069323878619374,0.33421750663129973,0.5403608307228212,Energy efficient but low delivery
+scenario_2b_static_jammer_medium,1,htt_only,0.10666666666666667,0.9085440156565769,0.9416340827631151,0.15927601809954742,Balanced baseline performance
+scenario_2b_static_jammer_medium,2,random,0.105,0.9087387487314375,0.46404361921603293,0.4849254231607166,Best anti-jamming behavior
+scenario_2b_static_jammer_medium,3,greedy_sinr,0.049999999999999996,0.9123443894381302,0.9720935086968837,0.2239336035514341,Balanced baseline performance
+scenario_2b_static_jammer_medium,4,greedy_nearest,0.024999999999999998,0.9151105016297003,0.9803131725259737,0.12666666666666512,Energy efficient but low delivery
+scenario_2b_static_jammer_medium,5,backscatter_only,0.023333333333333334,0.9149283218268144,0.978447818521348,0.1307692307692299,Energy efficient but low delivery
+scenario_2c_static_jammer_strong,1,random,0.105,0.9087387487314375,0.46404361921603293,0.4849254231607166,Best anti-jamming behavior
+scenario_2c_static_jammer_strong,2,htt_only,0.05666666666666667,0.9125602522280688,0.9689231019876181,0.14414414414414392,Balanced baseline performance
+scenario_2c_static_jammer_strong,3,greedy_sinr,0.03166666666666667,0.9138800934278276,0.982394366197183,0.7453159041394336,High fairness with competitive delivery
+scenario_2c_static_jammer_strong,4,greedy_nearest,0.013333333333333334,0.9160779823893943,0.9887265811242606,0.09999999999999605,Energy efficient but low delivery
+scenario_2c_static_jammer_strong,5,backscatter_only,0.011666666666666667,0.915894859828982,0.9890915457091928,0.09999999999999797,Energy efficient but low delivery
+scenario_3b_mobile_chase_uav,1,greedy_sinr,0.30833333333333335,0.8908748959925684,0.8106135083744629,0.2569517602396225,Balanced baseline performance
+scenario_3b_mobile_chase_uav,2,random,0.11166666666666665,0.908162120265913,0.4146404361921603,0.4709981299672739,Best anti-jamming behavior
+scenario_3b_mobile_chase_uav,3,htt_only,0.05666666666666667,0.9122843641373845,0.9691267513848159,0.12666666666666626,Balanced baseline performance
+scenario_3b_mobile_chase_uav,4,greedy_nearest,0.016666666666666666,0.9157992771399043,0.9871335759739432,0.09999999999999326,Energy efficient but low delivery
+scenario_3b_mobile_chase_uav,5,backscatter_only,0.015,0.9156177345032,0.9859694635429929,0.12666666666666435,Energy efficient but low delivery
+scenario_4_backscatter_types_calibrated,1,greedy_nearest,0.9766666666666667,0.8646937281790658,0.49727746682016066,0.07411147668666777,Balanced baseline performance
+scenario_4_backscatter_types_calibrated,2,backscatter_only,0.9566666666666667,0.8658081059693542,0.4957545449809866,0.07889701243357856,Balanced baseline performance
+scenario_4_backscatter_types_calibrated,3,greedy_sinr,0.625,0.882655824620215,0.7089153917114098,0.17740531081356434,Balanced baseline performance
+scenario_4_backscatter_types_calibrated,4,htt_only,0.28833333333333333,0.9005487716366817,0.47849099099099096,0.1061695259264772,Energy efficient but low delivery
+scenario_4_backscatter_types_calibrated,5,random,0.155,0.9078916667762567,0.34307992202729043,0.45985640611303363,Energy efficient but low delivery

@@ -1,0 +1,5 @@
+Variant,Throughput/frame mean +/- std,Drop mean +/- std,Jamming failure mean +/- std,Fairness mean +/- std,Interpretation
+QMIX base,0.9604 +/- 0.0255,0.4744 +/- 0.0054,0.2056 +/- 0.0744,0.5260 +/- 0.0572,Best overall trade-off; final MaDRL setting.
+fair_w2,0.9883 +/- 0.0350,0.4771 +/- 0.0180,0.1601 +/- 0.0501,0.5111 +/- 0.1478,Improves throughput and jamming but reduces mean fairness.
+fair_w3,0.8877 +/- 0.0094,0.4938 +/- 0.0113,0.3123 +/- 0.0711,0.4933 +/- 0.1880,Excessive fairness weighting degrades performance.
+no_balance_action,0.8439 +/- 0.0473,0.4926 +/- 0.0065,0.3352 +/- 0.0598,0.4767 +/- 0.0401,"Disabling balance action hurts fairness, throughput, and jamming."

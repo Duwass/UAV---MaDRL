@@ -1,0 +1,139 @@
+\chapter{Thực nghiệm, kết quả và thảo luận}
+
+\section{Thiết lập thực nghiệm}
+
+Các kết quả trong chương này được lấy từ artifact Phase 3 đã có; không huấn luyện lại mô hình và không thay đổi tham số mô phỏng. Benchmark chính là Scenario 4: 2 UAV, 15 IoT dị thể, 1 jammer di động, frame length 10 và episode length 200. Bảng \ref{tab:scenario_metrics} tóm tắt kịch bản và chỉ số.
+
+\begin{table}[H]
+\centering
+\caption{Kịch bản mô phỏng và chỉ số đánh giá.}
+\label{tab:scenario_metrics}
+\scriptsize
+\resizebox{\textwidth}{!}{\input{../../results/publication_tables/table5_simulation_scenarios_metrics.tex}}
+\end{table}
+
+Các phương pháp gồm Random, HTT-only, Backscatter-only, Greedy SINR, Greedy nearest, Flat DDQN, Hierarchical DDQN, QMIX-Hierarchical và các ablation công bằng. Flat DDQN và Hierarchical DDQN là kết quả đơn chạy trong gói artifact hiện tại; QMIX base và các ablation chính được báo cáo theo ba seed.
+
+\section{So sánh tổng thể trong Scenario 4}
+
+Bảng \ref{tab:overall_scenario4} và Hình \ref{fig:overall_throughput} cho thấy Flat DDQN đạt throughput/frame 0.3242, gần HTT-only 0.3278 và thấp hơn đáng kể so với các phương pháp phân cấp. Điều này hỗ trợ nhận định rằng giao diện hành động nguyên thủy 864 hành động gây khó khăn cho baseline DDQN đã triển khai.
+
+\begin{table}[H]
+\centering
+\caption{So sánh tổng thể trong Scenario 4. QMIX base được báo cáo theo mean/std trên ba seed; Flat DDQN và Hierarchical DDQN là kết quả đơn chạy trong artifact hiện tại.}
+\label{tab:overall_scenario4}
+\scriptsize
+\resizebox{\textwidth}{!}{\input{../../results/publication_tables/table1_overall_scenario4_comparison.tex}}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth]{fig1_overall_throughput_comparison.png}
+\caption{Throughput/frame của các baseline và phương pháp học trong Scenario 4. Hình này nhấn mạnh khoảng cách giữa Flat DDQN và các phương pháp dùng hành động phân cấp.}
+\label{fig:overall_throughput}
+\end{figure}
+
+Hierarchical DDQN đạt throughput/frame 0.9710, cho thấy việc giảm giao diện từ 864 xuống 10 hành động giúp bài toán khả học hơn. QMIX base đạt \(0.9604\pm0.0255\), thấp hơn nhẹ so với Hierarchical DDQN đơn chạy về throughput; vì vậy báo cáo không khẳng định QMIX vượt Hierarchical DDQN về thông lượng trung bình. Điểm mạnh của QMIX là ổn định đa seed và cải thiện các chỉ số phối hợp như jamming failure và fairness.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth]{fig2_drop_jam_fairness_comparison.png}
+\caption{So sánh drop rate, jamming failure và fairness. QMIX base giảm jamming failure và cải thiện fairness so với Hierarchical DDQN trong gói kết quả hiện có.}
+\label{fig:drop_jam_fairness}
+\end{figure}
+
+\section{Tiến trình thuật toán}
+
+Bảng \ref{tab:algorithm_progression} và Hình \ref{fig:algorithm_progression} trình bày tiến trình từ Flat DDQN sang Hierarchical DDQN và QMIX-Hierarchical. Bước cải thiện lớn nhất là thay đổi giao diện hành động, không phải chỉ thay đổi mạng học.
+
+\begin{table}[H]
+\centering
+\caption{Tiến trình thuật toán từ hành động phẳng đến hành động phân cấp và QMIX.}
+\label{tab:algorithm_progression}
+\scriptsize
+\resizebox{\textwidth}{!}{\input{../../results/publication_tables/table2_algorithm_progression.tex}}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.84\textwidth]{fig3_algorithm_progression.png}
+\caption{Tiến trình kết quả: Flat DDQN cho thấy nút thắt không gian hành động; Hierarchical DDQN chứng minh hiệu quả action abstraction; QMIX thêm phối hợp đa tác tử.}
+\label{fig:algorithm_progression}
+\end{figure}
+
+Flat DDQN + tuning trong Bảng \ref{tab:algorithm_progression} chỉ là kết quả hỗ trợ: reward scaling và dueling giúp ổn định một số khía cạnh huấn luyện nhưng không giải quyết nút thắt hành động phẳng. Phương pháp cuối cùng vì vậy giữ giao diện phân cấp và chuyển sang QMIX.
+
+\section{Ổn định đa seed của QMIX}
+
+Bảng \ref{tab:qmix_multiseed} báo cáo QMIX base trên seed 42, 43 và 44. Kết quả trung bình đạt throughput/frame \(0.9604\pm0.0255\), drop \(0.4744\pm0.0054\), jamming failure \(0.2056\pm0.0744\) và fairness \(0.5260\pm0.0572\).
+
+\begin{table}[H]
+\centering
+\caption{Kết quả QMIX base theo seed và thống kê mean/std.}
+\label{tab:qmix_multiseed}
+\scriptsize
+\resizebox{\textwidth}{!}{\input{../../results/publication_tables/table3_qmix_multiseed.tex}}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{fig4_qmix_multiseed_mean_std.png}
+\caption{Mean/std của QMIX base trên ba seed. Throughput ổn định hơn so với các chỉ số phối hợp như jamming failure và fairness.}
+\label{fig:qmix_multiseed}
+\end{figure}
+
+Số seed là ba nên kết luận về thống kê cần thận trọng. Tuy nhiên, trong phạm vi này, QMIX base duy trì thông lượng cao và có jamming failure thấp hơn Hierarchical DDQN đơn chạy.
+
+\section{Ablation công bằng}
+
+Bảng \ref{tab:fairness_ablation} và Hình \ref{fig:fairness_tradeoff} cho thấy các biến thể fairness. Biến thể fair\_w2 cải thiện throughput và jam nhưng giảm fairness trung bình xuống \(0.5111\pm0.1478\). Biến thể fair\_w3 làm giảm throughput và không cải thiện fairness. Do đó, tăng trọng số fairness trong executor không tự động tạo trade-off tốt hơn.
+
+\begin{table}[H]
+\centering
+\caption{Ablation công bằng. QMIX base được giữ làm thiết lập cuối cùng vì trade-off tổng thể tốt nhất trong các biến thể đã kiểm tra.}
+\label{tab:fairness_ablation}
+\scriptsize
+\resizebox{\textwidth}{!}{\input{../../results/publication_tables/table4_qmix_fairness_ablation.tex}}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{fig5_fairness_ablation_tradeoff.png}
+\caption{Đánh đổi throughput--fairness trong các biến thể. fair\_w2 có throughput và jamming tốt hơn nhưng fairness trung bình thấp hơn QMIX base.}
+\label{fig:fairness_tradeoff}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{fig6_fairness_ablation_bars.png}
+\caption{Ablation công bằng theo nhóm chỉ số. Vô hiệu hóa hành động cân bằng làm giảm throughput/fairness và tăng jamming so với QMIX base.}
+\label{fig:fairness_bars}
+\end{figure}
+
+Biến thể no\_balance\_action đạt throughput \(0.8439\pm0.0473\), fairness \(0.4767\pm0.0401\) và jam \(0.3352\pm0.0598\), đều kém hơn QMIX base. Điều này ủng hộ vai trò của BALANCE\_UNDERSERVED\_IOT như một thành phần hỗ trợ phối hợp công bằng, nhưng không có nghĩa fairness đã được giải quyết hoàn toàn.
+
+\section{Thảo luận}
+
+Kết quả hỗ trợ ba điểm chính. Một là Flat DDQN gặp khó với giao diện hành động 864 chiều. Hai là trừu tượng hóa hành động 10 mức cao là bước cải thiện quyết định. Ba là QMIX-Hierarchical cung cấp cấu trúc học hợp tác phù hợp hơn cho nhiều UAV, đặc biệt ở các chỉ số jamming/fairness.
+
+Các giới hạn phải được giữ rõ. Kết quả dựa trên mô phỏng với 2 UAV, 15 IoT và 1 jammer. Backscatter là abstraction mức hệ thống. Executor là rule-based và dùng thông tin môi trường. Một số baseline là kết quả đơn chạy, trong khi QMIX có đánh giá ba seed. Không có xác thực phần cứng và không có huấn luyện lại trong giai đoạn viết báo cáo.
+
+\section{Kết luận}
+
+Báo cáo đã trình bày bài toán điều khiển UAV-IoT dưới jammer di động với truyền thông backscatter-inspired/RF-powered ở mức hệ thống. Kết quả cho thấy Flat DDQN không đủ mạnh trong Scenario 4 do không gian hành động nguyên thủy lớn. Giao diện hành động phân cấp giảm số hành động trực tiếp từ 864 xuống 10 và giúp DDQN học được chính sách hiệu quả hơn. Trên cơ sở đó, QMIX-Hierarchical được chọn làm phương pháp MaDRL cuối cùng nhờ khả năng phối hợp nhiều UAV với quan sát cục bộ, phần thưởng chung, action masking và mixer dùng trạng thái toàn cục.
+
+Kết luận cần được hiểu trong phạm vi mô phỏng hiện tại. QMIX-Hierarchical không được khẳng định là vượt Hierarchical DDQN về throughput trung bình, nhưng có bằng chứng tốt hơn về ổn định đa seed và cải thiện trade-off gây nhiễu/công bằng. Fairness còn ở mức trung bình và cần nghiên cứu tiếp.
+
+\section{Hướng phát triển}
+
+Các hướng phát triển tiếp theo gồm:
+
+\begin{itemize}
+  \item mở rộng quy mô với nhiều UAV, nhiều IoT và nhiều jammer hơn;
+  \item kiểm tra jammer thông minh hơn, thích nghi theo chính sách UAV hoặc có chiến lược gây nhiễu học được;
+  \item cải thiện mô hình vật lý backscatter, bao gồm liên kết RF-source--IoT--UAV và điều kiện phần cứng thực tế;
+  \item thay executor rule-based bằng executor học được hoặc chính sách phân cấp end-to-end;
+  \item thiết kế mục tiêu fairness mạnh hơn, ví dụ reward shaping theo per-IoT service gap hoặc constrained RL;
+  \item chạy thêm seed, kiểm định thống kê và ablation rộng hơn;
+  \item đánh giá trên môi trường thực nghiệm hoặc hardware-in-the-loop.
+\end{itemize}

@@ -1,0 +1,202 @@
+\chapter{Mô hình hệ thống và phát biểu bài toán}
+
+\section{Tổng quan hệ thống}
+
+Báo cáo xét mạng UAV-IoT hoạt động theo frame rời rạc. Tập UAV là \(\mathcal{U}=\{1,\ldots,U\}\), tập IoT là \(\mathcal{I}=\{1,\ldots,N\}\), và tập jammer là \(\mathcal{J}=\{1,\ldots,J\}\). Thiết lập đánh giá cuối cùng sử dụng \(U=2\), \(N=15\), \(J=1\), frame length \(L=10\), và episode length \(T=200\). Hình \ref{fig:system_architecture} minh họa cấu trúc hệ thống.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{system_architecture.png}
+\caption{Mô hình Scenario 4: hai UAV phục vụ mười lăm thiết bị IoT dị thể dưới tác động của một jammer di động. Backscatter được mô tả ở mức trừu tượng hệ thống thông qua trạng thái primary busy và hệ số công suất hiệu dụng.}
+\label{fig:system_architecture}
+\end{figure}
+
+Tại mỗi frame, IoT sinh gói, jammer di chuyển, UAV chọn hành động, môi trường cập nhật truyền thông/năng lượng/hàng đợi và trả về phần thưởng chung. Bảng \ref{tab:notation_compact} tóm tắt các ký hiệu chính.
+
+\begin{table}[H]
+\centering
+\caption{Ký hiệu chính trong mô hình hệ thống.}
+\label{tab:notation_compact}
+\small
+\begin{tabularx}{\textwidth}{lXl}
+\toprule
+Ký hiệu & Ý nghĩa & Giá trị trong Scenario 4 \\
+\midrule
+\(\mathcal{U},U\) & Tập UAV và số UAV & \(U=2\) \\
+\(\mathcal{I},N\) & Tập IoT và số thiết bị IoT & \(N=15\) \\
+\(\mathcal{J},J\) & Tập jammer và số jammer & \(J=1\) \\
+\(L,T\) & Độ dài frame và episode & \(L=10,T=200\) \\
+\(q_{i,t},B_{i,t}\) & Hàng đợi và năng lượng IoT \(i\) & Theo trạng thái mô phỏng \\
+\(b_t\) & Trạng thái primary busy & Bernoulli theo cấu hình \\
+\(o^u_t,s_t\) & Quan sát cục bộ và trạng thái toàn cục & \(d_o=97,d_s=70\) \\
+\(a^u_t,z^u_t\) & Hành động nguyên thủy và hành động mức cao & 864 và 10 hành động \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Mô hình di chuyển và hàng đợi}
+
+UAV \(u\) có vị trí \((x^u_t,y^u_t)\), độ cao cố định \(h^u\), năng lượng \(E^u_t\) và bán kính phủ \(R_{\mathrm{cov}}\). Lệnh di chuyển thuộc chín hướng rời rạc. Cập nhật vị trí có dạng:
+
+\begin{equation}
+x^u_{t+1}=\mathrm{clip}(x^u_t+\Delta_x v_{\max},0,W),\quad
+y^u_{t+1}=\mathrm{clip}(y^u_t+\Delta_y v_{\max},0,H).
+\label{eq:uav_mobility}
+\end{equation}
+
+% TODO: verify exact implementation form
+Trong triển khai, hướng chéo được chuẩn hóa khi cập nhật vị trí; chi phí năng lượng di chuyển được tính từ chuẩn hướng rời rạc.
+
+Mỗi IoT \(i\) có hàng đợi \(q_{i,t}\), dung lượng hàng đợi \(Q_i^{\max}\), năng lượng \(B_{i,t}\) và loại thiết bị \(c_i\in\{1,2,3\}\). Số gói đến trong frame:
+
+\begin{equation}
+A_{i,t}\sim\mathrm{Binomial}(L,p_i^{\mathrm{arr}}).
+\label{eq:arrival}
+\end{equation}
+
+Cập nhật hàng đợi ở mức báo cáo:
+
+\begin{equation}
+q_{i,t+1}=\min\!\left(Q_i^{\max},q_{i,t}-D_{i,t}+A_{i,t}\right),
+\label{eq:queue_update}
+\end{equation}
+
+trong đó \(D_{i,t}\) là số gói được phục vụ thành công. Gói vượt dung lượng được tính vào drop rate.
+
+\section{Mô hình kênh và gây nhiễu}
+
+Suy hao đường truyền:
+
+\begin{equation}
+L(d)=\max(d,1)^{\alpha},
+\label{eq:path_loss}
+\end{equation}
+
+và công suất nhận:
+
+\begin{equation}
+P_{\mathrm{rx}}(P,d)=\frac{P}{L(d)}.
+\label{eq:received_power}
+\end{equation}
+
+Nhiễu từ jammer \(j\) tại bộ thu \(r\):
+
+\begin{equation}
+I_{j,r}=
+\begin{cases}
+\dfrac{P_j}{\max(d_{j,r},1)^{\alpha}}, & d^{2D}_{j,r}\le R_j,\\
+0, & \text{ngược lại}.
+\end{cases}
+\label{eq:jammer_interference}
+\end{equation}
+
+SINR của liên kết:
+
+\begin{equation}
+\Gamma_{a,r,t}=
+\frac{P_{\mathrm{rx}}(P_a,d_{a,r})}
+{N_0+\sum_{j\in\mathcal{J}}I_{j,r}}.
+\label{eq:sinr}
+\end{equation}
+
+Xác suất truyền thành công được mô phỏng như:
+
+\begin{equation}
+p_{\mathrm{succ}}(\Gamma)=
+\begin{cases}
+1, & \theta=0,\Gamma>0,\\
+0, & \theta=0,\Gamma=0,\\
+\min\left(1,\dfrac{\Gamma}{\Gamma+\theta}\right), & \Gamma\ge\theta,\\
+0.1\dfrac{\Gamma}{\theta}, & 0\le\Gamma<\theta.
+\end{cases}
+\label{eq:success_probability}
+\end{equation}
+
+Một thất bại được xem là liên quan đến gây nhiễu khi SINR thấp hơn ngưỡng và nhiễu jammer lớn hơn nhiễu nền.
+
+\section{Năng lượng và truyền thông backscatter-inspired}
+
+Môi trường hỗ trợ idle, harvest, backscatter, active, relay và avoid-jammer. Báo cáo tập trung vào idle/harvest/backscatter/active/avoid-jammer. Harvest tăng năng lượng IoT:
+
+\begin{equation}
+B_{i,t+1}=\min(B_i^{\max},B_{i,t}+h_i).
+\label{eq:harvest_energy}
+\end{equation}
+
+Active transmission yêu cầu:
+
+\begin{equation}
+B_{i,t}\ge c_i^{\mathrm{act}},
+\label{eq:active_constraint}
+\end{equation}
+
+và làm giảm năng lượng:
+
+\begin{equation}
+B_{i,t+1}=B_{i,t}-c_i^{\mathrm{act}}.
+\label{eq:active_energy}
+\end{equation}
+
+Backscatter được mô phỏng bằng công suất phát hiệu dụng phụ thuộc nguồn RF và hệ số backscatter của thiết bị. Đây là abstraction ở mức hệ thống; chưa xác thực đầy đủ đặc tính vật lý ambient backscatter.
+
+\section{Trạng thái, hành động và phần thưởng}
+
+Quan sát cục bộ của UAV gồm trạng thái UAV, jammer gần nhất, primary busy và đặc trưng tương đối của từng IoT. Kích thước trong Scenario 4:
+
+\begin{equation}
+d_o=7+6N=97.
+\label{eq:local_obs_dim}
+\end{equation}
+
+Trạng thái toàn cục:
+
+\begin{equation}
+d_s=3U+4N+2J+2=70.
+\label{eq:global_state_dim}
+\end{equation}
+
+Không gian hành động phẳng và phân cấp:
+
+\begin{equation}
+|\mathcal{A}_{\mathrm{flat}}|=9(N+1)6=864,\quad
+|\mathcal{A}_{\mathrm{hier}}|=10.
+\label{eq:action_dims}
+\end{equation}
+
+Phần thưởng chung của môi trường:
+
+\begin{equation}
+\begin{aligned}
+r_t ={}& w_{\mathrm{thr}}S_t + w_{\mathrm{avoid}}A_t
+- w_{\mathrm{drop}}D_t - w_{\mathrm{delay}}\bar{q}_t \\
+&- w_{\mathrm{uavE}}E^u_t - w_{\mathrm{jam}}J_t
+- w_{\mathrm{col}}C_t - w_{\mathrm{unfair}}(1-F_t).
+\end{aligned}
+\label{eq:reward}
+\end{equation}
+
+Trong đó \(S_t\) là số gói thành công, \(A_t\) là bonus tránh jammer, \(D_t\) là số gói rơi, \(\bar{q}_t\) là hàng đợi trung bình, \(E^u_t\) là năng lượng UAV sử dụng, \(J_t\) là thất bại do nhiễu, \(C_t\) là va chạm và \(F_t\) là Jain fairness.
+
+\section{Mục tiêu tối ưu và chỉ số đánh giá}
+
+Mục tiêu RL ở mức báo cáo:
+
+\begin{equation}
+\max_{\pi}\mathbb{E}_{\pi}\left[\sum_{t=0}^{T-1}\gamma^t r_t\right].
+\label{eq:rl_objective}
+\end{equation}
+
+% TODO: verify exact implementation form
+Phương trình \eqref{eq:rl_objective} là dạng tổng quát của mục tiêu học; cập nhật cụ thể phụ thuộc DDQN hoặc QMIX.
+
+Các chỉ số đánh giá chính:
+
+\begin{align}
+\eta &= \frac{\sum_i D_i}{T_{\mathrm{ep}}}, \label{eq:throughput}\\
+\rho_{\mathrm{drop}} &= \frac{\sum_i \mathrm{Dropped}_i}{\max(\sum_i \mathrm{Arrived}_i,1)}, \label{eq:drop_rate}\\
+\rho_{\mathrm{jam}} &= \frac{\mathrm{jamming\ failures}}{\max(\mathrm{transmission\ attempts},1)}, \label{eq:jam_rate}\\
+F &= \frac{(\sum_i D_i)^2}{N\sum_iD_i^2+\epsilon}, \label{eq:jain}\\
+\xi &= \frac{\sum_iD_i}{\max(E_{\mathrm{UAV}}+E_{\mathrm{IoT}},10^{-9})}. \label{eq:energy_efficiency}
+\end{align}
+
+Bài toán cuối cùng là học chính sách UAV hợp tác nhằm tăng thông lượng và giảm rơi gói/gây nhiễu, đồng thời duy trì công bằng và hiệu quả năng lượng trong phạm vi mô phỏng đã triển khai.

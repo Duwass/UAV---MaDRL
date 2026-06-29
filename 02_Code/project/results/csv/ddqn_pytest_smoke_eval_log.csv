@@ -1,0 +1,3 @@
+eval_avg_reward,eval_avg_throughput,eval_avg_throughput_per_frame,eval_packet_drop_rate,eval_jamming_failure_rate,eval_fairness,eval_energy_efficiency,eval_backscatter_success_rate,eval_active_success_rate,eval_mode_usage_harvest,eval_mode_usage_backscatter,eval_mode_usage_active,episode
+-1160.0876198410488,0.0,0.0,0.8007968127490039,0.0,1.0,0.0,0.0,0.0,8.0,0.0,0.0,1
+-948.6354264068709,76.0,0.38,0.6534653465346535,0.0,0.2,3.228185020110394,1.0,0.0,0.0,76.0,0.0,2

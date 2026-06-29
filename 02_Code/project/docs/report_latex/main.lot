@@ -1,0 +1,13 @@
+\babel@toc {vietnamese}{}\relax 
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {3.1}{\ignorespaces Ký hiệu chính trong mô hình hệ thống.}}{13}{table.caption.6}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {4.1}{\ignorespaces Mười hành động mức cao trong executor phân cấp.}}{17}{table.caption.8}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {5.1}{\ignorespaces Kịch bản mô phỏng và chỉ số đánh giá.}}{20}{table.caption.10}%
+\contentsline {table}{\numberline {5.2}{\ignorespaces So sánh tổng thể trong Scenario 4. QMIX base được báo cáo theo mean/std trên ba seed; Flat DDQN và Hierarchical DDQN là kết quả đơn chạy trong artifact hiện tại.}}{20}{table.caption.11}%
+\contentsline {table}{\numberline {5.3}{\ignorespaces Tiến trình thuật toán từ hành động phẳng đến hành động phân cấp và QMIX.}}{22}{table.caption.14}%
+\contentsline {table}{\numberline {5.4}{\ignorespaces Kết quả QMIX base theo seed và thống kê mean/std.}}{22}{table.caption.16}%
+\contentsline {table}{\numberline {5.5}{\ignorespaces Ablation công bằng. QMIX base được giữ làm thiết lập cuối cùng vì trade-off tổng thể tốt nhất trong các biến thể đã kiểm tra.}}{23}{table.caption.18}%

@@ -1,0 +1,5 @@
+Method,Action interface,Action dimension,Multi-agent coordination,Throughput/frame,Drop rate,Jamming failure,Fairness,Interpretation
+Flat DDQN,Flat movement x IoT x mode,864,Centralized-factorized DDQN,0.3242,0.5846,0.6093,0.1930,Large flat action space limits learning in heterogeneous Scenario 4.
+Flat DDQN + tuning,Flat movement x IoT x mode,864,Centralized-factorized DDQN,0.1203,0.6073,0.5557,0.1374,Reward scaling and dueling stabilized loss but did not solve the action-interface bottleneck.
+Hierarchical DDQN,High-level executor,10,Centralized-factorized DDQN,0.9710,0.4761,0.4403,0.4754,Action abstraction is the dominant improvement over flat DDQN.
+QMIX-Hierarchical,High-level executor,10,QMIX value decomposition,0.9604,0.4744,0.2056,0.5260,QMIX preserves high throughput and improves jamming/fairness trade-off over hierarchical DDQN.

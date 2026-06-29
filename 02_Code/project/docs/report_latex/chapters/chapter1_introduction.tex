@@ -1,0 +1,61 @@
+\chapter{Giới thiệu}
+
+\section{Bối cảnh nghiên cứu}
+
+Internet vạn vật (Internet of Things, IoT) ngày càng được triển khai trong các môi trường phân tán, khó tiếp cận hoặc thiếu hạ tầng truyền thông cố định. Trong các bối cảnh này, thiết bị bay không người lái (Unmanned Aerial Vehicle, UAV) có thể đóng vai trò như nút thu thập dữ liệu, trạm phủ sóng tạm thời hoặc nền tảng phục vụ linh hoạt cho các thiết bị IoT \cite{uav_iot_survey_todo}. Khả năng di chuyển của UAV giúp hệ thống thích nghi với phân bố thiết bị, trạng thái hàng đợi và chất lượng kênh theo thời gian.
+
+Nhiều thiết bị IoT có năng lượng hạn chế nên không thể phụ thuộc hoàn toàn vào truyền chủ động công suất cao. Các cơ chế RF-powered và backscatter-inspired tạo ra một hướng tiếp cận hấp dẫn ở mức hệ thống: thiết bị có thể harvest năng lượng khi kênh sơ cấp bận, truyền backscatter khi có điều kiện phù hợp, hoặc truyền active khi có đủ năng lượng. Báo cáo này sử dụng cách mô hình hóa backscatter ở mức trừu tượng hệ thống, không khẳng định đây là mô hình vật lý ambient-backscatter đầy đủ.
+
+\section{Vấn đề gây nhiễu trong mạng UAV-IoT}
+
+Gây nhiễu vô tuyến làm tăng nhiễu tại bộ thu, suy giảm SINR và làm tăng xác suất truyền thất bại. Trong mạng UAV-IoT, tác động này không chỉ làm giảm thông lượng mà còn làm tăng rơi gói, kéo dài hàng đợi và làm mất công bằng phục vụ giữa các thiết bị. Khi jammer có khả năng di động, vùng rủi ro nhiễu thay đổi theo thời gian; UAV phải cân bằng giữa việc di chuyển đến gần IoT, tránh jammer và chọn chế độ truyền phù hợp.
+
+Bài toán vì vậy có tính động và tổ hợp: tại mỗi frame, mỗi UAV phải quyết định di chuyển, chọn IoT mục tiêu và chọn chế độ truyền thông. Các heuristic đơn giản có thể mạnh trong một số điều kiện, nhưng thường chỉ tối ưu một khía cạnh như khoảng cách, SINR, active-only hoặc backscatter-only. Điều này tạo động lực cho các chính sách học thích nghi.
+
+\section{Động lực sử dụng học tăng cường đa tác tử}
+
+Học tăng cường (Reinforcement Learning, RL) phù hợp với điều khiển mạng động vì chính sách có thể học từ tương tác với môi trường và tối ưu tín hiệu thưởng dài hạn \cite{sutton2018reinforcement}. Các phương pháp DQN và Double DQN mở rộng Q-learning bằng mạng nơ-ron sâu, giúp xử lý không gian trạng thái lớn và hành động rời rạc \cite{mnih2015dqn,vanhasselt2016ddqn}.
+
+Tuy nhiên, trong hệ nhiều UAV, mỗi UAV có quan sát và hành động riêng nhưng mục tiêu là hiệu quả toàn mạng. Điều này làm cho học tăng cường đa tác tử (Multi-Agent Reinforcement Learning, MaDRL) phù hợp hơn so với cách xem toàn bộ hệ thống như một tác tử đơn. QMIX là một lựa chọn tự nhiên cho bài toán hợp tác có hành động rời rạc, phần thưởng chung, quan sát cục bộ và trạng thái toàn cục dùng trong huấn luyện \cite{rashid2018qmix}.
+
+\section{Khoảng trống nghiên cứu}
+
+Các nghiên cứu về RF-powered/backscatter thường tập trung vào lập lịch, offloading hoặc tối ưu chế độ truyền trong các thiết lập tương đối riêng lẻ. Các nghiên cứu UAV-IoT thường nhấn mạnh quỹ đạo, vùng phủ hoặc thu thập dữ liệu. Trong khi đó, ít công trình kết hợp đồng thời các yếu tố sau trong cùng một thiết lập mô phỏng: nhiều UAV phục vụ IoT dị thể, jammer di động, lựa chọn harvest/backscatter/active, trừu tượng hóa hành động phân cấp và học phối hợp bằng QMIX.
+
+Khoảng trống chính của đề tài là giao diện điều khiển. Nếu để tác tử học trực tiếp trên hành động nguyên thủy, không gian hành động trong Scenario 4 có kích thước 864. Kết quả thực nghiệm cho thấy Flat DDQN gặp khó khăn với giao diện này. Do đó, báo cáo tập trung vào việc kết hợp trừu tượng hóa hành động 10 mức cao với QMIX-Hierarchical.
+
+\section{Mục tiêu nghiên cứu}
+
+Các mục tiêu chính gồm:
+
+\begin{itemize}
+  \item mô hình hóa môi trường UAV-IoT có jammer di động, hàng đợi IoT, năng lượng thiết bị và các chế độ idle/harvest/backscatter/active;
+  \item sử dụng backscatter-inspired/RF-powered abstraction để mô tả quyết định truyền thông của IoT năng lượng thấp;
+  \item đánh giá Flat DDQN, Hierarchical DDQN và QMIX-Hierarchical trên cùng cấu hình Scenario 4 đã triển khai;
+  \item cải thiện thông lượng và khả năng chống nhiễu trong khi vẫn xem xét công bằng, rơi gói và hiệu quả năng lượng;
+  \item phân tích vai trò của hành động BALANCE\_UNDERSERVED\_IOT trong hành vi phối hợp.
+\end{itemize}
+
+\section{Phạm vi nghiên cứu}
+
+Báo cáo sử dụng cấu hình đã triển khai và đánh giá làm nguồn sự thật: 2 UAV, 15 thiết bị IoT, 1 jammer di động, frame length 10 và episode length 200. Trong cấu hình này, giao diện hành động phẳng có 864 hành động, giao diện phân cấp có 10 hành động mức cao, quan sát cục bộ QMIX có kích thước 97 và trạng thái toàn cục có kích thước 70.
+
+Các bảng tham số đề xuất ở giai đoạn lập kế hoạch, nếu khác với cấu hình trên, chỉ được xem là tài liệu tham khảo nội bộ. Báo cáo không thay đổi tham số mô phỏng, không huấn luyện lại mô hình và không tạo kết quả thực nghiệm mới. Toàn bộ kết luận dựa trên artifact Phase 3 đã có.
+
+\section{Đóng góp chính}
+
+Các đóng góp được diễn giải thận trọng như sau:
+
+\begin{itemize}
+  \item phát biểu bài toán phục vụ UAV-IoT dưới jammer di động như một bài toán điều khiển học tăng cường hợp tác;
+  \item xây dựng giao diện hành động phân cấp giảm không gian hành động trực tiếp từ 864 xuống 10 trong Scenario 4;
+  \item đánh giá Hierarchical DDQN để chứng minh vai trò của trừu tượng hóa hành động;
+  \item triển khai và đánh giá QMIX-Hierarchical cho phối hợp nhiều UAV với quan sát cục bộ, phần thưởng chung và mixer dùng trạng thái toàn cục;
+  \item phân tích thông lượng, gây nhiễu, công bằng và ablation của cơ chế cân bằng thiết bị chưa được phục vụ đầy đủ.
+\end{itemize}
+
+Báo cáo không khẳng định QMIX vượt trội về mọi chỉ số hoặc giải quyết hoàn toàn fairness. QMIX-Hierarchical được chọn vì có bằng chứng đa seed và cải thiện hành vi liên quan đến gây nhiễu/công bằng trong khi giữ thông lượng cao.
+
+\section{Cấu trúc báo cáo}
+
+Phần còn lại của báo cáo được tổ chức như sau. Chương 2 trình bày cơ sở lý thuyết và nghiên cứu liên quan. Chương 3 mô tả mô hình hệ thống và phát biểu bài toán. Chương 4 trình bày giao diện hành động phân cấp và phương pháp QMIX-Hierarchical. Chương 5 trình bày thiết lập thực nghiệm, kết quả, thảo luận, kết luận và hướng phát triển.

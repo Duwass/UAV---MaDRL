@@ -1,0 +1,78 @@
+% Final-draft preview for Chapters I--V.
+% TODO: Replace placeholders with official university, faculty, author, and supervisor information.
+\documentclass[12pt,a4paper,oneside]{report}
+
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[utf8]{inputenc}
+  \usepackage[T5]{fontenc}
+  \usepackage[vietnamese]{babel}
+\else
+  \usepackage{fontspec}
+  \usepackage[vietnamese]{babel}
+  \setmainfont{Times New Roman}
+\fi
+
+\usepackage{geometry}
+\geometry{left=3.0cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
+
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{tabularx}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{float}
+
+\graphicspath{{../../results/publication_figures/}{figures/}}
+\emergencystretch=3em
+
+\renewcommand{\chaptername}{Chương}
+\renewcommand{\contentsname}{Mục lục}
+\renewcommand{\bibname}{Tài liệu tham khảo}
+\setlist[itemize]{leftmargin=1.2cm}
+
+\title{
+  \textbf{Học tăng cường đa tác tử cho mạng UAV-IoT hỗ trợ chống gây nhiễu với truyền thông backscatter cảm hứng RF-powered}\\
+  \vspace{0.5cm}
+  \large Bản thảo LaTeX hoàn thiện sơ bộ
+}
+\author{
+  Sinh viên thực hiện: \textbf{TODO: Họ và tên sinh viên}\\
+  Mã số sinh viên: \textbf{TODO: MSSV}\\
+  Giảng viên hướng dẫn: \textbf{TODO: Họ và tên giảng viên}
+}
+\date{
+  Trường/Viện: \textbf{TODO: Tên trường}\\
+  Khoa/Bộ môn: \textbf{TODO: Tên khoa/bộ môn}\\
+  \vspace{0.3cm}
+  \today
+}
+
+\begin{document}
+
+\maketitle
+\include{chapters/abstract_vi}
+\tableofcontents
+\listoffigures
+\listoftables
+\clearpage
+
+\include{chapters/chapter1_introduction}
+\include{chapters/chapter2_background_related_work}
+\include{chapters/chapter3_system_model_problem}
+\include{chapters/chapter4_proposed_method}
+\include{chapters/chapter5_experiments_results_discussion}
+
+\clearpage
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}

@@ -1,0 +1,91 @@
+\chapter{Cơ sở lý thuyết và nghiên cứu liên quan}
+
+\section{Mạng UAV-IoT}
+
+Mạng UAV-IoT là hệ thống trong đó UAV hỗ trợ thiết bị IoT thông qua thu thập dữ liệu, chuyển tiếp, mở rộng vùng phủ hoặc cung cấp kết nối tạm thời. So với hạ tầng cố định, UAV có ưu điểm là cơ động và có thể thay đổi vị trí theo nhu cầu phục vụ \cite{uav_iot_survey_todo}. Trong bài toán thu thập dữ liệu, UAV cần cân nhắc vị trí, vùng phủ, năng lượng, lịch phục vụ và công bằng giữa các thiết bị.
+
+Khi nhiều UAV cùng hoạt động, quyết định của một UAV ảnh hưởng đến UAV khác thông qua vùng phủ, trùng mục tiêu, nhiễu và phân bố tải. Do đó, bài toán UAV-IoT có bản chất điều khiển đa tác tử, đặc biệt khi mục tiêu là hiệu quả toàn mạng thay vì lợi ích riêng của từng UAV.
+
+\section{Gây nhiễu và chống nhiễu trong mạng không dây}
+
+Gây nhiễu là quá trình phát tín hiệu không mong muốn nhằm làm giảm chất lượng liên kết không dây. Ảnh hưởng trực tiếp của gây nhiễu là làm giảm SINR:
+
+\begin{equation}
+\mathrm{SINR}=\frac{P_{\mathrm{s}}}{N_0+I_{\mathrm{jam}}},
+\label{eq:background_sinr}
+\end{equation}
+
+trong đó \(P_{\mathrm{s}}\) là công suất tín hiệu mong muốn, \(N_0\) là nhiễu nền và \(I_{\mathrm{jam}}\) là nhiễu do jammer. Khi jammer di động, \(I_{\mathrm{jam}}\) thay đổi theo vị trí UAV, IoT và jammer, khiến việc chọn vị trí và chế độ truyền trở thành bài toán thích nghi \cite{anti_jamming_todo}.
+
+Các phương pháp chống nhiễu có thể dựa trên tránh vùng nhiễu, chọn kênh, lập lịch truyền hoặc điều khiển công suất. Trong báo cáo này, trọng tâm là học chính sách UAV để giảm thất bại truyền do nhiễu trong khi vẫn duy trì thông lượng và công bằng.
+
+\section{Truyền thông RF-powered và backscatter-inspired}
+
+RF-powered communication cho phép thiết bị năng lượng thấp tận dụng năng lượng vô tuyến để hỗ trợ hoạt động truyền thông. Ambient backscatter cho phép thiết bị điều chế thông tin bằng cách phản xạ tín hiệu RF môi trường, giảm nhu cầu phát sóng chủ động \cite{huynh2018rfpowered}. Các hướng DRL cho backscatter/MEC và lập lịch trong mạng RF-powered backscatter cung cấp nền tảng cho việc dùng học tăng cường trong lựa chọn chế độ truyền \cite{gong2020drlbackscattermec,tran2018ddqntimescheduling}.
+
+Trong dự án này, backscatter được mô hình hóa như một trừu tượng ở mức hệ thống: trạng thái kênh sơ cấp bận, loại thiết bị, hàng đợi, năng lượng và hệ số công suất backscatter hiệu dụng quyết định khả năng truyền. Cách mô tả này phù hợp cho nghiên cứu điều khiển mạng, nhưng không nên được xem là mô hình vật lý ambient-backscatter đầy đủ.
+
+\section{Mô hình quyết định Markov và học tăng cường}
+
+Một tiến trình quyết định Markov (Markov Decision Process, MDP) gồm trạng thái \(s_t\), hành động \(a_t\), phần thưởng \(r_t\), quy luật chuyển trạng thái và hệ số chiết khấu \(\gamma\). Mục tiêu của RL là học chính sách \(\pi(a|s)\) tối đa hóa return kỳ vọng:
+
+\begin{equation}
+G_t=\mathbb{E}_{\pi}\left[\sum_{k=0}^{\infty}\gamma^k r_{t+k}\right].
+\label{eq:return}
+\end{equation}
+
+Trong UAV-IoT, trạng thái bao gồm vị trí, hàng đợi, năng lượng, jammer và kênh; hành động gồm di chuyển, chọn mục tiêu và chọn chế độ truyền. RL phù hợp vì môi trường biến động theo thời gian và khó có lời giải tối ưu đóng dạng đơn giản \cite{sutton2018reinforcement}.
+
+\section{DQN và Double DQN}
+
+Q-learning học hàm giá trị hành động \(Q(s,a)\). DQN xấp xỉ hàm này bằng mạng nơ-ron sâu và sử dụng replay buffer cùng target network để ổn định huấn luyện \cite{mnih2015dqn}. Double DQN giảm thiên lệch đánh giá quá cao bằng cách dùng mạng online để chọn hành động và mạng target để đánh giá hành động đó \cite{vanhasselt2016ddqn}. Mục tiêu Double DQN thường viết:
+
+\begin{equation}
+y=r+\gamma Q^{-}\left(s',\arg\max_{a'} Q(s',a')\right).
+\label{eq:background_ddqn}
+\end{equation}
+
+Trong báo cáo, Flat DDQN là baseline trên giao diện hành động nguyên thủy; Hierarchical DDQN dùng cùng ý tưởng nhưng đầu ra là 10 hành động mức cao.
+
+\section{Học tăng cường phân cấp và trừu tượng hóa hành động}
+
+Không gian hành động tổ hợp làm cho học giá trị trở nên khó khăn. Với \(N=15\) IoT, hành động phẳng trong Scenario 4 có:
+
+\begin{equation}
+|\mathcal{A}_{\mathrm{flat}}|=9(N+1)6=864.
+\label{eq:background_flat_dim}
+\end{equation}
+
+Học tăng cường phân cấp và action abstraction giảm độ khó bằng cách cho tác tử chọn hành động mức cao, sau đó một chính sách con hoặc executor chuyển hành động này thành hành động nguyên thủy \cite{hierarchical_rl_todo}. Trong triển khai hiện tại, executor là rule-based và dùng thông tin môi trường để chọn mục tiêu, mode và hướng di chuyển.
+
+\section{Học tăng cường đa tác tử}
+
+Trong MaDRL, nhiều tác tử cùng tương tác với môi trường. Với hệ nhiều UAV, mỗi UAV có quan sát cục bộ nhưng phần thưởng là mục tiêu chung của toàn mạng. Một mô hình phổ biến là centralized training with decentralized execution (CTDE): huấn luyện có thể dùng thông tin toàn cục, còn thực thi dùng quan sát cục bộ.
+
+Trong báo cáo này, CTDE cần được diễn đạt cẩn trọng. QMIX-Hierarchical cho phép chọn hành động mức cao dựa trên quan sát cục bộ, nhưng executor ánh xạ hành động mức cao sang hành động nguyên thủy bằng thông tin môi trường. Vì vậy, đây là decentralized high-level action selection kết hợp với rule-based executor, không phải fully decentralized primitive-action execution.
+
+\section{QMIX}
+
+QMIX là phương pháp phân rã giá trị cho bài toán hợp tác rời rạc \cite{rashid2018qmix}. Mỗi tác tử có hàm giá trị cục bộ \(Q_u(o^u,a^u)\), và mixer kết hợp các giá trị này thành giá trị đội \(Q_{\mathrm{tot}}\) dựa trên trạng thái toàn cục:
+
+\begin{equation}
+Q_{\mathrm{tot}}=f_{\mathrm{mix}}(Q_1,\ldots,Q_U,s).
+\label{eq:background_qmix}
+\end{equation}
+
+QMIX áp đặt ràng buộc đơn điệu:
+
+\begin{equation}
+\frac{\partial Q_{\mathrm{tot}}}{\partial Q_u}\ge 0,\quad \forall u.
+\label{eq:background_monotonic}
+\end{equation}
+
+Ràng buộc này giúp việc chọn hành động cục bộ phù hợp với tối ưu hóa giá trị chung. Sau khi dùng giao diện hành động phân cấp 10 hành động, bài toán UAV-IoT phù hợp với QMIX vì có nhiều UAV hợp tác, phần thưởng chung và trạng thái toàn cục dùng trong huấn luyện.
+
+\section{Tổng quan nghiên cứu liên quan và khoảng trống}
+
+Các hướng nghiên cứu liên quan gồm UAV-IoT, anti-jamming, RF-powered/backscatter, DRL cho tài nguyên mạng và MaDRL cho điều khiển hợp tác. Tuy nhiên, báo cáo này tập trung vào khoảng giao giữa các hướng đó: UAV-IoT với jammer di động, thiết bị IoT dị thể có harvest/backscatter/active, giao diện hành động phân cấp và QMIX-Hierarchical.
+
+Khoảng trống chính không chỉ nằm ở thuật toán QMIX, mà ở cách biến bài toán điều khiển nguyên thủy lớn thành bài toán học rời rạc nhỏ hơn và có ý nghĩa miền bài toán. Đây là lý do Chapter IV trình bày cả Flat DDQN, Hierarchical DDQN và QMIX-Hierarchical như một tiến trình phương pháp.
+
+% TODO: Bổ sung tài liệu được xác minh đầy đủ cho UAV-IoT survey, anti-jamming, hierarchical RL và fairness trước khi nộp bản cuối.

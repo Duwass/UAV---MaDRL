@@ -1,0 +1,9 @@
+
+Sửa báo cáo MaDRL v1
+	Duy
+		xây dựng kĩ lại mô hình kênh và gây nhiễu
+		nâng lên 3d và 5 uav 
+		thêm nhiều thông số (ngoại trừ throught put)
+	Nhi
+		Jamming thêm cơ chế thu năng lượng
+		
