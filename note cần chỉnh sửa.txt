@@ -6,4 +6,11 @@ Sửa báo cáo MaDRL v1
 		thêm nhiều thông số (ngoại trừ throught put)
 	Nhi
 		Jamming thêm cơ chế thu năng lượng
+		- Năng lượng tối đa là 50, ban đầu đầy
+		- Sau khi đến ngưỡng còn 5 thì tìm nguồn RF để sạc
+		- Tốc độ sạc: Càng gần nguồn RF thì sạc càng nhanh
+		- Có chế tìm: Jammer nhớ RSSI bước trước 
+				→ so sánh với bước này → nếu tăng thì tiếp tục hướng đó,
+				nếu giảm thì đổi hướng.
+		- Khi sạc đến ngưỡng 30 có thể tiếp tục jamming
 		

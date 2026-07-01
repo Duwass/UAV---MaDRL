@@ -24,7 +24,6 @@ def distance_3d(a: object, b: object) -> float:
 
 
 def path_loss(distance: float, path_loss_exponent: float) -> float:
-    # Keep the reference distance at 1 m to avoid singular received power.
     return float(max(distance, 1.0) ** path_loss_exponent)
 
 
@@ -33,6 +32,8 @@ def received_power(tx_power: float, distance: float, path_loss_exponent: float) 
 
 
 def jammer_interference(jammer: object, receiver: object, path_loss_exponent: float) -> float:
+    if not bool(getattr(jammer, "is_active", True)):
+        return 0.0
     if distance_2d(jammer, receiver) > float(getattr(jammer, "radius", np.inf)):
         return 0.0
     return received_power(float(getattr(jammer, "power")), distance_3d(jammer, receiver), path_loss_exponent)

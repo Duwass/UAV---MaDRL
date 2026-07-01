@@ -217,6 +217,10 @@ The RF source models the primary transmitter. Each frame has a busy/idle primary
 
 The jammer can be disabled, static, random-walk mobile, or chase the nearest UAV. Jammer interference contributes to SINR at the UAV receiver. Stronger or closer jammers reduce SINR and transmission success probability.
 
+Additionally, the jammer features a realistic energy harvesting and movement cycle:
+- **Energy-Harvesting & Hysteresis Activation**: The jammer consumes energy (`jam_energy_cost`) while active. When its energy drops below `energy_threshold` (e.g., 5.0), it turns OFF and seeks RF sources to harvest energy. To prevent rapid on-off switching (chattering), a hysteresis mechanism is used: once deactivated, it remains off until it recharges back up to a "good enough" level (`resume_threshold`, e.g., 30.0).
+- **RSSI Hill-Climbing Gradient Ascent**: While deactivated and seeking energy, the jammer moves using a realistic RSSI-only gradient ascent algorithm (`move_hill_climbing`). It measures a single scalar value of received power (`measured_rssi`) via simulated RF sensors at its position—never receiving the exact coordinates of the RF sources. It maintains its direction if the signal improves, and performs a random restart (changes direction) if the signal weakens.
+
 Communication modes:
 
 - `idle`: no communication.

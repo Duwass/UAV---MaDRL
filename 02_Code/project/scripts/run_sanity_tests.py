@@ -60,6 +60,8 @@ def main() -> None:
     strong_jam_cfg["jammer"]["mobility"] = "static"
     strong_jam_cfg["jammer"]["power"] = 1.0e9
     strong_jam_cfg["jammer"]["radius"] = 1000
+    strong_jam_cfg["jammer"]["initial_energy"] = 50.0
+    strong_jam_cfg["jammer"]["energy_threshold"] = 5.0
     no_jam = run_metric(no_jam_cfg, "htt_only", episodes=3)
     strong_jam = run_metric(strong_jam_cfg, "htt_only", episodes=3)
     results.append(
@@ -108,6 +110,8 @@ def main() -> None:
     severe_jam_cfg["jammer"]["enabled"] = True
     severe_jam_cfg["jammer"]["power"] = 1.0e9
     severe_jam_cfg["jammer"]["radius"] = 1000
+    severe_jam_cfg["jammer"]["initial_energy"] = 50.0
+    severe_jam_cfg["jammer"]["energy_threshold"] = 5.0
     mild_jam = run_metric(mild_jam_cfg, "htt_only", episodes=2)
     severe_jam = run_metric(severe_jam_cfg, "htt_only", episodes=2)
     results.append(

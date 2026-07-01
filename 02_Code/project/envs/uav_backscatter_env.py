@@ -12,7 +12,9 @@ from gymnasium import spaces
 from envs.channel_model import (
     compute_sinr,
     distance_2d,
+    distance_3d,
     jammer_interference,
+    received_power,
     success_probability_from_sinr,
 )
 from envs.entities import IoTDevice, Jammer, RFSource, UAV
@@ -90,7 +92,7 @@ class UAVBackscatterEnv(gym.Env):
 
         self.action_size = NUM_MOVEMENT_ACTIONS * (self.num_iot + 1) * NUM_COMMUNICATION_MODES
         self.observation_dim = 7 + self.num_iot * 6
-        self.global_state_dim = self.num_uav * 3 + self.num_iot * 4 + self.configured_num_jammer * 2 + 2
+        self.global_state_dim = self.num_uav * 3 + self.num_iot * 4 + self.configured_num_jammer * 3 + 2
         self.action_space = spaces.Discrete(self.action_size)
         self.observation_space = spaces.Box(
             low=-1.0,
@@ -143,6 +145,11 @@ class UAVBackscatterEnv(gym.Env):
         step_index = self.current_step
         arrivals, dropped_packets = self._update_iot_arrivals()
         self._update_jammers()
+        for jammer in self.jammers:
+            if jammer.is_active:
+                self.episode_totals["jammer_active_steps"] += 1.0
+            else:
+                self.episode_totals["jammer_inactive_steps"] += 1.0
         action_metrics = self._apply_actions(actions)
         collision_count = self._count_collisions()
         avg_queue_length = self._average_queue_length()
@@ -253,9 +260,13 @@ class UAVBackscatterEnv(gym.Env):
         for idx in range(self.configured_num_jammer):
             if idx < len(self.jammers):
                 jammer = self.jammers[idx]
-                values.extend([jammer.x / self.area_width, jammer.y / self.area_height])
+                values.extend([
+                    jammer.x / self.area_width,
+                    jammer.y / self.area_height,
+                    jammer.energy / max(jammer.energy_capacity, 1.0e-9),
+                ])
             else:
-                values.extend([0.0, 0.0])
+                values.extend([0.0, 0.0, 0.0])
         values.extend([float(self.primary_busy), self.current_step / max(self.max_steps, 1)])
         return np.asarray(values, dtype=np.float32)
 
@@ -426,6 +437,8 @@ class UAVBackscatterEnv(gym.Env):
                 else:
                     x = self.area_width * (0.5 + 0.15 * (idx % 2))
                     y = self.area_height * 0.5
+                initial_energy = float(self.jammer_cfg.get("initial_energy", 0.0))
+                energy_threshold = float(self.jammer_cfg.get("energy_threshold", 5.0))
                 self.jammers.append(
                     Jammer(
                         id=idx,
@@ -435,6 +448,9 @@ class UAVBackscatterEnv(gym.Env):
                         speed=float(self.jammer_cfg.get("speed", 10.0)),
                         radius=float(self.jammer_cfg.get("radius", 200.0)),
                         mobility=str(self.jammer_cfg.get("mobility", "random_walk")),
+                        energy=initial_energy,
+                        energy_capacity=float(self.jammer_cfg.get("energy_capacity", 100.0)),
+                        is_active=initial_energy >= energy_threshold,
                     )
                 )
 
@@ -473,6 +489,9 @@ class UAVBackscatterEnv(gym.Env):
             "mode_usage_relay": 0.0,
             "mode_usage_avoid_jammer": 0.0,
             "greedy_fallback_count": 0.0,
+            "jammer_harvested_energy_total": 0.0,
+            "jammer_active_steps": 0.0,
+            "jammer_inactive_steps": 0.0,
         }
         self.last_frame_metrics = {}
         self.last_reward_breakdown = {}
@@ -670,6 +689,27 @@ class UAVBackscatterEnv(gym.Env):
     def _backscatter_tx_power_factor(self, iot: IoTDevice) -> float:
         return float(self._iot_type_cfg(iot.device_type).get("backscatter_tx_power_factor", self.channel_cfg.get("backscatter_tx_power_factor", 0.02)))
 
+    # ── Jammer helpers (mirror _harvested_energy / _active_energy_cost pattern) ──
+
+    def _jammer_harvest_amount(self, jammer: Jammer, rf_source: RFSource) -> float:
+        """Physics-based RF harvest: uses received_power() so closer jammer = more energy.
+        Unlike IoTDevice (static, fixed value), jammer is mobile so distance matters."""
+        if not self.primary_busy:
+            return 0.0
+        raw_power = received_power(
+            rf_source.tx_power,
+            distance_3d(rf_source, jammer),
+            float(self.channel_cfg.get("path_loss_exponent", 2.2)),
+        )
+        efficiency = float(self.jammer_cfg.get("harvest_efficiency", 0.5))
+        return raw_power * efficiency
+
+    def _jam_energy_cost(self) -> float:
+        return float(self.jammer_cfg.get("jam_energy_cost", 0.5))
+
+    def _jammer_energy_threshold(self) -> float:
+        return float(self.jammer_cfg.get("energy_threshold", 5.0))
+
     def _iot_type_cfg(self, device_type: int) -> dict[str, Any]:
         by_type = self.iot_cfg.get("type_params", {})
         if not isinstance(by_type, dict):
@@ -708,8 +748,33 @@ class UAVBackscatterEnv(gym.Env):
         return arrivals, dropped
 
     def _update_jammers(self) -> None:
+        path_loss_exp = float(self.channel_cfg.get("path_loss_exponent", 2.2))
         for jammer in self.jammers:
-            jammer.step(self.uavs, self.rng, self.area_width, self.area_height)
+            for rf_source in self.rf_sources:
+                jammer.harvest_energy(self._jammer_harvest_amount(jammer, rf_source))
+            if jammer.is_active:
+                jammer.consume_jam_energy(self._jam_energy_cost())
+            if jammer.is_active:
+                if jammer.energy < self._jammer_energy_threshold():
+                    jammer.is_active = False
+            else:
+                resume_threshold = float(self.jammer_cfg.get("resume_threshold", 30.0))
+                if jammer.energy >= resume_threshold:
+                    jammer.is_active = True
+            if not jammer.is_active and self.rf_sources:
+                jammer.measured_rssi = float(sum(
+                    received_power(
+                        rf.tx_power,
+                        max(float(np.sqrt(
+                            (jammer.x - rf.x) ** 2 + (jammer.y - rf.y) ** 2
+                        )), 1.0),
+                        path_loss_exp,
+                    )
+                    for rf in self.rf_sources
+                ))
+                jammer.move_hill_climbing(self.rng, self.area_width, self.area_height)
+            else:
+                jammer.step(self.uavs, self.rng, self.area_width, self.area_height)
 
     def _update_primary_channel(self) -> None:
         if not self.rf_sources:
@@ -793,6 +858,9 @@ class UAVBackscatterEnv(gym.Env):
             "mode_usage_relay": float(self.episode_totals.get("mode_usage_relay", 0.0)),
             "mode_usage_avoid_jammer": float(self.episode_totals.get("mode_usage_avoid_jammer", 0.0)),
             "greedy_fallback_count": float(self.episode_totals.get("greedy_fallback_count", 0.0)),
+            "jammer_active_steps": float(self.episode_totals.get("jammer_active_steps", 0.0)),
+            "jammer_inactive_steps": float(self.episode_totals.get("jammer_inactive_steps", 0.0)),
+            "jammer_harvested_energy_total": float(self.episode_totals.get("jammer_harvested_energy_total", 0.0)),
         }
         metrics.update(self._flatten_named_values("per_uav_served_packets_uav", self.per_uav_served_packets))
         metrics.update(self._flatten_named_values("per_iot_delivered_packets_iot", self.delivered_per_iot))

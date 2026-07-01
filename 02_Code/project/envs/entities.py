@@ -100,9 +100,77 @@ class Jammer:
     speed: float
     radius: float
     mobility: str
+    energy: float = 0.0
+    energy_capacity: float = 100.0
+    is_active: bool = True
+    measured_rssi: float = 0.0 
+    last_rssi: float = 0.0
+    last_dx: float = 0.0 
+    last_dy: float = 0.0
 
     def position(self) -> tuple[float, float]:
         return self.x, self.y
+
+    def harvest_energy(self, amount: float) -> float:
+        amount = max(0.0, float(amount))
+        before = self.energy
+        self.energy = min(self.energy_capacity, self.energy + amount)
+        return self.energy - before
+
+    def consume_jam_energy(self, amount: float) -> float:
+        amount = max(0.0, float(amount))
+        consumed = min(self.energy, amount)
+        self.energy -= consumed
+        return consumed
+
+    def move_hill_climbing(
+        self,
+        rng: np.random.Generator,
+        area_width: float,
+        area_height: float,
+    ) -> None:
+        if self.measured_rssi >= self.last_rssi:
+            if self.last_dx == 0.0 and self.last_dy == 0.0:
+                angle = float(rng.uniform(0.0, 2.0 * np.pi))
+                self.last_dx = float(np.cos(angle))
+                self.last_dy = float(np.sin(angle))
+        else:
+            angle = float(rng.uniform(0.0, 2.0 * np.pi))
+            self.last_dx = float(np.cos(angle))
+            self.last_dy = float(np.sin(angle))
+        self.last_rssi = self.measured_rssi
+        self.x = float(np.clip(self.x + self.speed * self.last_dx, 0.0, area_width))
+        self.y = float(np.clip(self.y + self.speed * self.last_dy, 0.0, area_height))
+
+    def move_toward_stronger_signal(
+        self,
+        rf_sources: list,
+        path_loss_exponent: float,
+        area_width: float,
+        area_height: float,
+    ) -> None:
+        if not rf_sources:
+            return
+        best_power = -1.0
+        best_cos, best_sin = 0.0, 0.0
+        for k in range(8):
+            angle = k * 2.0 * np.pi / 8.0
+            nx = self.x + self.speed * np.cos(angle)
+            ny = self.y + self.speed * np.sin(angle)
+            total_power = 0.0
+            for rf in rf_sources:
+                rx = float(getattr(rf, "x"))
+                ry = float(getattr(rf, "y"))
+                rh = float(getattr(rf, "h", 0.0))
+                dist = float(np.sqrt((nx - rx) ** 2 + (ny - ry) ** 2 + rh ** 2))
+                dist = max(dist, 1.0)
+                total_power += float(getattr(rf, "tx_power", 1.0)) / (dist ** path_loss_exponent)
+            if total_power > best_power:
+                best_power = total_power
+                best_cos = np.cos(angle)
+                best_sin = np.sin(angle)
+        self.x = float(np.clip(self.x + self.speed * best_cos, 0.0, area_width))
+        self.y = float(np.clip(self.y + self.speed * best_sin, 0.0, area_height))
 
     def move_random_walk(self, rng: np.random.Generator, area_width: float, area_height: float) -> None:
         angle = float(rng.uniform(0.0, 2.0 * np.pi))
