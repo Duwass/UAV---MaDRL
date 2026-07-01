@@ -13,4 +13,19 @@ Sửa báo cáo MaDRL v1
 				→ so sánh với bước này → nếu tăng thì tiếp tục hướng đó,
 				nếu giảm thì đổi hướng.
 		- Khi sạc đến ngưỡng 30 có thể tiếp tục jamming
+
+		Các thay đổi về code:
+		* entities.py:
+		- Bổ sung thuộc tính class Jammer
+		- harvest_energy(amount): Cộng năng lượng thu được.
+		- consume_jam_energy(amount): Trừ năng lượng tiêu thụ khi phá sóng.
+		- move_hill_climbing: thuật toán đo RSSI
+		* uav_backscatter_env.py:
+		- Tích hợp năng lượng vào không gian trạng thái
+		- _jammer_harvest_amount: Công suất sạc dựa trên suy hao khoảng cách 3D từ Jammer tới nguồn RF bằng hàm received_power() kết hợp hiệu suất sạc harvest_efficiency.
+		- _jam_energy_cost: Năng lượng tiêu thụ mỗi bước để phá sóng
+		- _jammer_energy_threshold: Ngưỡng năng lượng tối thiểu.
+		- Cập nhật _update_jammers
+		* test_jammer_hill_climbing.py: Test việc dò tìm nguồn RF
+
 		
