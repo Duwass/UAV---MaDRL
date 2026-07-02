@@ -53,6 +53,13 @@ def closest_target(uav: UAV, candidates: list[IoTDevice], taken: set[int] | None
     return min(pool, key=lambda iot: distance_2d(uav, iot))
 
 
+def in_coverage(env: Any, uav: UAV, target: IoTDevice) -> bool:
+    base_env = unwrap_env(env)
+    if hasattr(base_env, "_in_coverage"):
+        return bool(base_env._in_coverage(uav, target))
+    return distance_2d(uav, target) <= float(uav.coverage_radius)
+
+
 def mask_enabled(env: Any) -> bool:
     base_env = unwrap_env(env)
     return bool(getattr(base_env, "action_masking_cfg", {}).get("enabled", False))
@@ -66,17 +73,18 @@ def masked_fallback_action(env: Any, uav_id: int, proposed_action: int) -> int:
     if 0 <= int(proposed_action) < len(mask) and mask[int(proposed_action)] == 1:
         return int(proposed_action)
 
-    movement, selected_iot_index, _ = decode_action(int(proposed_action), base_env.num_iot)
+    movement_count = int(getattr(base_env, "num_movement_actions", 9))
+    movement, selected_iot_index, _ = decode_action(int(proposed_action), base_env.num_iot, movement_count)
     for mode in (MODE_IDLE,):
-        candidate = encode_action(movement, selected_iot_index, mode, base_env.num_iot)
+        candidate = encode_action(movement, selected_iot_index, mode, base_env.num_iot, movement_count)
         if mask[candidate] == 1:
             base_env.record_policy_fallback()
             return candidate
     for iot in sorted(base_env.iot_devices, key=lambda item: distance_2d(base_env.uavs[uav_id], item)):
-        candidate = encode_action(movement, iot.id + 1, MODE_IDLE, base_env.num_iot)
+        candidate = encode_action(movement, iot.id + 1, MODE_IDLE, base_env.num_iot, movement_count)
         if mask[candidate] == 1:
             base_env.record_policy_fallback()
             return candidate
-    candidate = encode_action(0, 0, MODE_IDLE, base_env.num_iot)
+    candidate = encode_action(0, 0, MODE_IDLE, base_env.num_iot, movement_count)
     base_env.record_policy_fallback()
     return candidate if mask[candidate] == 1 else int(mask.nonzero()[0][0])

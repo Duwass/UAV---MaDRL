@@ -12,13 +12,20 @@ from gymnasium import spaces
 from envs.channel_model import (
     compute_sinr,
     distance_2d,
-    distance_3d,
     jammer_interference,
     received_power,
+    select_distance,
     success_probability_from_sinr,
 )
 from envs.entities import IoTDevice, Jammer, RFSource, UAV
-from envs.mobility_model import compute_movement_energy, move_uav
+from envs.mobility_model import (
+    LEGACY_MOVEMENT_ACTIONS,
+    MOVEMENT_ACTIONS_3D,
+    MOVE_DOWN,
+    MOVE_UP,
+    compute_movement_energy,
+    move_uav,
+)
 from envs.reward import compute_reward
 
 
@@ -28,7 +35,8 @@ MODE_BACKSCATTER = 2
 MODE_ACTIVE = 3
 MODE_RELAY = 4
 MODE_AVOID_JAMMER = 5
-NUM_MOVEMENT_ACTIONS = 9
+NUM_MOVEMENT_ACTIONS = LEGACY_MOVEMENT_ACTIONS
+NUM_MOVEMENT_ACTIONS_3D = MOVEMENT_ACTIONS_3D
 NUM_COMMUNICATION_MODES = 6
 
 
@@ -39,12 +47,19 @@ def load_config(config: str | Path | dict[str, Any]) -> dict[str, Any]:
     return deepcopy(config)
 
 
-def encode_action(movement_action: int, selected_iot_index: int, communication_mode: int, num_iot: int) -> int:
+def encode_action(
+    movement_action: int,
+    selected_iot_index: int,
+    communication_mode: int,
+    num_iot: int,
+    num_movement_actions: int = NUM_MOVEMENT_ACTIONS,
+) -> int:
     movement_action = int(movement_action)
     selected_iot_index = int(selected_iot_index)
     communication_mode = int(communication_mode)
-    if not 0 <= movement_action < NUM_MOVEMENT_ACTIONS:
-        raise ValueError(f"movement_action must be in [0, 8], got {movement_action}")
+    num_movement_actions = int(num_movement_actions)
+    if not 0 <= movement_action < num_movement_actions:
+        raise ValueError(f"movement_action must be in [0, {num_movement_actions - 1}], got {movement_action}")
     if not 0 <= selected_iot_index <= int(num_iot):
         raise ValueError(f"selected_iot_index must be in [0, {num_iot}], got {selected_iot_index}")
     if not 0 <= communication_mode < NUM_COMMUNICATION_MODES:
@@ -52,9 +67,14 @@ def encode_action(movement_action: int, selected_iot_index: int, communication_m
     return int(((movement_action * (int(num_iot) + 1)) + selected_iot_index) * NUM_COMMUNICATION_MODES + communication_mode)
 
 
-def decode_action(action_id: int, num_iot: int) -> tuple[int, int, int]:
+def decode_action(
+    action_id: int,
+    num_iot: int,
+    num_movement_actions: int = NUM_MOVEMENT_ACTIONS,
+) -> tuple[int, int, int]:
     action_id = int(action_id)
-    total_actions = NUM_MOVEMENT_ACTIONS * (int(num_iot) + 1) * NUM_COMMUNICATION_MODES
+    num_movement_actions = int(num_movement_actions)
+    total_actions = num_movement_actions * (int(num_iot) + 1) * NUM_COMMUNICATION_MODES
     if action_id < 0 or action_id >= total_actions:
         return MODE_IDLE, 0, MODE_IDLE
     communication_mode = action_id % NUM_COMMUNICATION_MODES
@@ -76,6 +96,8 @@ class UAVBackscatterEnv(gym.Env):
         self.uav_cfg = self.config.get("uav", {})
         self.channel_cfg = self.config.get("channel", {})
         self.jammer_cfg = self.config.get("jammer", {})
+        self.rf_source_cfg = self.config.get("rf_source", self.config.get("rf_sources", {})) or {}
+        self.coverage_cfg = self.config.get("coverage", {}) or {}
         self.reward_cfg = self.config.get("reward", {})
         self.action_masking_cfg = self.config.get("action_masking", {})
 
@@ -89,10 +111,21 @@ class UAVBackscatterEnv(gym.Env):
         self.num_iot = int(self.net_cfg.get("num_iot", 1))
         self.configured_num_jammer = int(self.net_cfg.get("num_jammer", 0))
         self.num_rf_sources = int(self.net_cfg.get("num_rf_sources", 1))
+        self.num_movement_actions = int(
+            self.uav_cfg.get(
+                "num_movement_actions",
+                NUM_MOVEMENT_ACTIONS_3D if self._is_3d_environment() else NUM_MOVEMENT_ACTIONS,
+            )
+        )
+        self.uav_horizontal_step = float(self.uav_cfg.get("horizontal_step", self.uav_cfg.get("max_speed", 20.0)))
+        self.uav_vertical_step = float(self.uav_cfg.get("vertical_step", self.uav_cfg.get("max_speed", 20.0)))
+        self.uav_initial_altitude = float(self.uav_cfg.get("initial_altitude", self.uav_cfg.get("altitude", 100.0)))
+        self.uav_altitude_min = float(self.uav_cfg.get("altitude_min", self.uav_initial_altitude))
+        self.uav_altitude_max = float(self.uav_cfg.get("altitude_max", self.uav_initial_altitude))
 
-        self.action_size = NUM_MOVEMENT_ACTIONS * (self.num_iot + 1) * NUM_COMMUNICATION_MODES
-        self.observation_dim = 7 + self.num_iot * 6
-        self.global_state_dim = self.num_uav * 3 + self.num_iot * 4 + self.configured_num_jammer * 3 + 2
+        self.action_size = self.num_movement_actions * (self.num_iot + 1) * NUM_COMMUNICATION_MODES
+        self.observation_dim = self._compute_observation_dim()
+        self.global_state_dim = self._compute_global_state_dim()
         self.action_space = spaces.Discrete(self.action_size)
         self.observation_space = spaces.Box(
             low=-1.0,
@@ -136,6 +169,7 @@ class UAVBackscatterEnv(gym.Env):
         self.primary_busy = False
         self._init_entities()
         self._reset_episode_totals()
+        self._record_3d_state_metrics()
         self.pending_policy_fallbacks = 0.0
         self._update_primary_channel()
         observations = self._get_all_observations()
@@ -203,6 +237,12 @@ class UAVBackscatterEnv(gym.Env):
         ]
         for key in metric_accumulators:
             self.episode_totals[key] += action_metrics.get(key, 0.0)
+        if self._is_3d_environment():
+            for key in ("vertical_action_count", "vertical_movement_total", "altitude_boundary_hits"):
+                self.episode_totals[key] += action_metrics.get(key, 0.0)
+            frame_3d_metrics = self._record_3d_state_metrics()
+        else:
+            frame_3d_metrics = {}
 
         self.last_frame_metrics = {
             "step": float(step_index),
@@ -223,6 +263,7 @@ class UAVBackscatterEnv(gym.Env):
                 action_metrics["jammed_transmission_count"] / max(action_metrics["transmission_attempts"], 1.0)
             ),
             **self._diagnostic_frame_metrics(action_metrics),
+            **self._diagnostic_3d_frame_metrics(action_metrics, frame_3d_metrics),
             **reward_breakdown,
         }
 
@@ -243,68 +284,199 @@ class UAVBackscatterEnv(gym.Env):
     def close(self) -> None:
         return
 
+    def get_obs_dim(self) -> int:
+        return int(self.observation_dim)
+
+    def get_state_dim(self) -> int:
+        return int(self.global_state_dim)
+
+    def get_action_dim(self) -> int:
+        return int(self.action_size)
+
+    def _compute_observation_dim(self) -> int:
+        if self._is_3d_environment():
+            return 9 + self.num_iot * 7
+        return 7 + self.num_iot * 6
+
+    def _compute_global_state_dim(self) -> int:
+        if self._is_3d_environment():
+            return self.num_uav * 4 + self.num_iot * 5 + self.configured_num_jammer * 4 + 2
+        return self.num_uav * 3 + self.num_iot * 4 + self.configured_num_jammer * 3 + 2
+
+    def _current_3d_state_metrics(self) -> dict[str, float]:
+        if not self._is_3d_environment():
+            return {}
+        altitudes = [float(uav.z) for uav in self.uavs]
+        if altitudes:
+            avg_altitude = float(np.mean(altitudes))
+            min_altitude = float(np.min(altitudes))
+            max_altitude = float(np.max(altitudes))
+        else:
+            avg_altitude = min_altitude = max_altitude = 0.0
+        uav_iot_distances = [
+            select_distance(uav, iot, "3d")
+            for uav in self.uavs
+            for iot in self.iot_devices
+        ]
+        if self.jammers:
+            uav_jammer_distances = [
+                min(select_distance(uav, jammer, "3d") for jammer in self.jammers)
+                for uav in self.uavs
+            ]
+        else:
+            uav_jammer_distances = []
+        return {
+            "avg_uav_altitude": avg_altitude,
+            "min_uav_altitude": min_altitude,
+            "max_uav_altitude": max_altitude,
+            "avg_uav_iot_3d_distance": float(np.mean(uav_iot_distances)) if uav_iot_distances else 0.0,
+            "avg_uav_jammer_3d_distance": float(np.mean(uav_jammer_distances)) if uav_jammer_distances else 0.0,
+        }
+
+    def _record_3d_state_metrics(self) -> dict[str, float]:
+        if not self._is_3d_environment() or not self.episode_totals:
+            return {}
+        metrics = self._current_3d_state_metrics()
+        if not metrics:
+            return {}
+        self.episode_totals["uav_altitude_sum"] += metrics["avg_uav_altitude"]
+        self.episode_totals["uav_altitude_observations"] += 1.0
+        self.episode_totals["min_uav_altitude"] = min(self.episode_totals["min_uav_altitude"], metrics["min_uav_altitude"])
+        self.episode_totals["max_uav_altitude"] = max(self.episode_totals["max_uav_altitude"], metrics["max_uav_altitude"])
+        self.episode_totals["uav_iot_3d_distance_sum"] += metrics["avg_uav_iot_3d_distance"]
+        self.episode_totals["uav_iot_3d_distance_observations"] += 1.0
+        self.episode_totals["uav_jammer_3d_distance_sum"] += metrics["avg_uav_jammer_3d_distance"]
+        self.episode_totals["uav_jammer_3d_distance_observations"] += 1.0
+        return metrics
+
     def get_global_state(self) -> np.ndarray:
         values: list[float] = []
         initial_uav_energy = float(self.uav_cfg.get("initial_energy", 1000.0))
-        for uav in self.uavs:
-            values.extend([uav.x / self.area_width, uav.y / self.area_height, uav.energy / max(initial_uav_energy, 1.0e-9)])
-        for iot in self.iot_devices:
-            values.extend(
-                [
-                    iot.x / self.area_width,
-                    iot.y / self.area_height,
-                    iot.queue / max(iot.queue_capacity, 1),
-                    iot.energy / max(iot.energy_capacity, 1.0e-9),
-                ]
-            )
-        for idx in range(self.configured_num_jammer):
-            if idx < len(self.jammers):
-                jammer = self.jammers[idx]
-                values.extend([
-                    jammer.x / self.area_width,
-                    jammer.y / self.area_height,
-                    jammer.energy / max(jammer.energy_capacity, 1.0e-9),
-                ])
-            else:
-                values.extend([0.0, 0.0, 0.0])
+        if self._is_3d_environment():
+            for uav in self.uavs:
+                values.extend(
+                    [
+                        uav.x / self.area_width,
+                        uav.y / self.area_height,
+                        self._normalize_z(uav.z),
+                        uav.energy / max(initial_uav_energy, 1.0e-9),
+                    ]
+                )
+            for iot in self.iot_devices:
+                values.extend(
+                    [
+                        iot.x / self.area_width,
+                        iot.y / self.area_height,
+                        self._normalize_z(iot.z),
+                        iot.queue / max(iot.queue_capacity, 1),
+                        iot.energy / max(iot.energy_capacity, 1.0e-9),
+                    ]
+                )
+            for idx in range(self.configured_num_jammer):
+                if idx < len(self.jammers):
+                    jammer = self.jammers[idx]
+                    values.extend(
+                        [
+                            jammer.x / self.area_width,
+                            jammer.y / self.area_height,
+                            self._normalize_z(jammer.z),
+                            jammer.energy / max(jammer.energy_capacity, 1.0e-9),
+                        ]
+                    )
+                else:
+                    values.extend([0.0, 0.0, 0.0, 0.0])
+        else:
+            for uav in self.uavs:
+                values.extend([uav.x / self.area_width, uav.y / self.area_height, uav.energy / max(initial_uav_energy, 1.0e-9)])
+            for iot in self.iot_devices:
+                values.extend(
+                    [
+                        iot.x / self.area_width,
+                        iot.y / self.area_height,
+                        iot.queue / max(iot.queue_capacity, 1),
+                        iot.energy / max(iot.energy_capacity, 1.0e-9),
+                    ]
+                )
+            for idx in range(self.configured_num_jammer):
+                if idx < len(self.jammers):
+                    jammer = self.jammers[idx]
+                    values.extend([
+                        jammer.x / self.area_width,
+                        jammer.y / self.area_height,
+                        jammer.energy / max(jammer.energy_capacity, 1.0e-9),
+                    ])
+                else:
+                    values.extend([0.0, 0.0, 0.0])
         values.extend([float(self.primary_busy), self.current_step / max(self.max_steps, 1)])
         return np.asarray(values, dtype=np.float32)
 
     def get_local_observation(self, uav_id: int) -> np.ndarray:
         uav = self.uavs[int(uav_id)]
-        diag = float(np.hypot(self.area_width, self.area_height))
+        diag = self._max_3d_distance() if self._is_3d_environment() else float(np.hypot(self.area_width, self.area_height))
         initial_uav_energy = float(self.uav_cfg.get("initial_energy", 1000.0))
         if self.jammers:
-            nearest = min(self.jammers, key=lambda jammer: distance_2d(uav, jammer))
+            nearest = min(self.jammers, key=lambda jammer: select_distance(uav, jammer, self._jammer_influence_distance_mode()))
             jammer_dx = (nearest.x - uav.x) / self.area_width
             jammer_dy = (nearest.y - uav.y) / self.area_height
-            jammer_distance = distance_2d(uav, nearest) / diag
+            if self._is_3d_environment():
+                jammer_dz = self._normalize_dz(nearest.z - uav.z)
+                jammer_distance = select_distance(uav, nearest, "3d") / diag
+            else:
+                jammer_distance = select_distance(uav, nearest, self._jammer_influence_distance_mode()) / diag
         else:
             jammer_dx = 0.0
             jammer_dy = 0.0
+            jammer_dz = 0.0
             jammer_distance = 1.0
 
-        values: list[float] = [
-            uav.x / self.area_width,
-            uav.y / self.area_height,
-            uav.energy / max(initial_uav_energy, 1.0e-9),
-            jammer_dx,
-            jammer_dy,
-            jammer_distance,
-            float(self.primary_busy),
-        ]
+        if self._is_3d_environment():
+            values: list[float] = [
+                uav.x / self.area_width,
+                uav.y / self.area_height,
+                self._normalize_z(uav.z),
+                uav.energy / max(initial_uav_energy, 1.0e-9),
+                jammer_dx,
+                jammer_dy,
+                jammer_dz,
+                jammer_distance,
+                float(self.primary_busy),
+            ]
+        else:
+            values = [
+                uav.x / self.area_width,
+                uav.y / self.area_height,
+                uav.energy / max(initial_uav_energy, 1.0e-9),
+                jammer_dx,
+                jammer_dy,
+                jammer_distance,
+                float(self.primary_busy),
+            ]
         for iot in self.iot_devices:
-            dist = distance_2d(uav, iot)
-            values.extend(
-                [
-                    (iot.x - uav.x) / self.area_width,
-                    (iot.y - uav.y) / self.area_height,
-                    dist / diag,
-                    iot.queue / max(iot.queue_capacity, 1),
-                    iot.energy / max(iot.energy_capacity, 1.0e-9),
-                    float(dist <= uav.coverage_radius),
-                ]
-            )
+            dist = self._coverage_distance(uav, iot)
+            if self._is_3d_environment():
+                dist_3d = select_distance(uav, iot, "3d")
+                values.extend(
+                    [
+                        (iot.x - uav.x) / self.area_width,
+                        (iot.y - uav.y) / self.area_height,
+                        self._normalize_dz(iot.z - uav.z),
+                        dist_3d / diag,
+                        iot.queue / max(iot.queue_capacity, 1),
+                        iot.energy / max(iot.energy_capacity, 1.0e-9),
+                        float(self._in_coverage(uav, iot)),
+                    ]
+                )
+            else:
+                values.extend(
+                    [
+                        (iot.x - uav.x) / self.area_width,
+                        (iot.y - uav.y) / self.area_height,
+                        dist / diag,
+                        iot.queue / max(iot.queue_capacity, 1),
+                        iot.energy / max(iot.energy_capacity, 1.0e-9),
+                        float(dist <= uav.coverage_radius),
+                    ]
+                )
         return np.asarray(values, dtype=np.float32)
 
     def get_action_space(self) -> spaces.Discrete:
@@ -316,10 +488,78 @@ class UAVBackscatterEnv(gym.Env):
     def record_policy_fallback(self, count: float = 1.0) -> None:
         self.pending_policy_fallbacks += float(count)
 
+    def _is_3d_environment(self) -> bool:
+        env_cfg = self.config.get("environment", {}) or {}
+        return str(env_cfg.get("dimension", "")).lower() == "3" or str(env_cfg.get("dimension", "")).lower() == "3d"
+
+    def _altitude_range(self) -> float:
+        return max(float(self.uav_altitude_max - self.uav_altitude_min), 1.0e-9)
+
+    def _normalize_z(self, z: float) -> float:
+        return float(np.clip((float(z) - self.uav_altitude_min) / self._altitude_range(), -1.0, 1.0))
+
+    def _normalize_dz(self, dz: float) -> float:
+        return float(np.clip(float(dz) / self._altitude_range(), -1.0, 1.0))
+
+    def _max_3d_distance(self) -> float:
+        z_values = [
+            self.uav_altitude_min,
+            self.uav_altitude_max,
+            float(self.iot_cfg.get("altitude", 0.0)),
+            float(self.jammer_cfg.get("altitude", self.uav_initial_altitude)),
+            float(self.rf_source_cfg.get("altitude", 0.0)),
+        ]
+        z_span = max(z_values) - min(z_values)
+        return max(float(np.sqrt(self.area_width**2 + self.area_height**2 + z_span**2)), 1.0e-9)
+
+    def _distance_mode_from(self, section: dict[str, Any], key: str, legacy_default: str) -> str:
+        default = "3d" if self._is_3d_environment() else legacy_default
+        return str(section.get(key, default)).lower()
+
+    def _channel_distance_mode(self) -> str:
+        return self._distance_mode_from(self.channel_cfg, "distance_mode", "3d")
+
+    def _coverage_distance_mode(self) -> str:
+        return self._distance_mode_from(self.coverage_cfg, "distance_mode", "horizontal")
+
+    def _jammer_influence_distance_mode(self) -> str:
+        return self._distance_mode_from(self.jammer_cfg, "influence_distance_mode", "horizontal")
+
+    def _coverage_distance(self, uav: UAV, target: IoTDevice) -> float:
+        return select_distance(uav, target, self._coverage_distance_mode())
+
+    def _in_coverage(self, uav: UAV, target: IoTDevice) -> bool:
+        return self._coverage_distance(uav, target) <= float(uav.coverage_radius)
+
+    def _compute_sinr(self, tx_power: float, transmitter: object, receiver: object) -> float:
+        return compute_sinr(
+            tx_power,
+            transmitter,
+            receiver,
+            self.jammers,
+            float(self.channel_cfg.get("noise_power", 1.0e-9)),
+            float(self.channel_cfg.get("path_loss_exponent", 2.2)),
+            self._channel_distance_mode(),
+            self._jammer_influence_distance_mode(),
+        )
+
+    def _jammer_interference(self, jammer: Jammer, receiver: object) -> float:
+        return jammer_interference(
+            jammer,
+            receiver,
+            float(self.channel_cfg.get("path_loss_exponent", 2.2)),
+            self._channel_distance_mode(),
+            self._jammer_influence_distance_mode(),
+        )
+
     def get_action_mask(self, uav_id: int) -> np.ndarray:
         mask = np.zeros(self.action_size, dtype=np.int8)
         for action_id in range(self.action_size):
-            movement_action, selected_iot_index, communication_mode = decode_action(action_id, self.num_iot)
+            movement_action, selected_iot_index, communication_mode = decode_action(
+                action_id,
+                self.num_iot,
+                self.num_movement_actions,
+            )
             valid, _ = self._validate_decoded_action(int(uav_id), movement_action, selected_iot_index, communication_mode)
             mask[action_id] = 1 if valid else 0
         return mask
@@ -331,8 +571,13 @@ class UAVBackscatterEnv(gym.Env):
         selected_iot_index: int,
         communication_mode: int,
     ) -> tuple[bool, str]:
-        if not 0 <= int(movement_action) < NUM_MOVEMENT_ACTIONS:
+        if not 0 <= int(movement_action) < self.num_movement_actions:
             return False, "invalid_action"
+        uav = self.uavs[int(uav_id)]
+        if int(movement_action) == MOVE_UP and uav.z >= self.uav_altitude_max - 1.0e-9:
+            return False, "altitude_boundary"
+        if int(movement_action) == MOVE_DOWN and uav.z <= self.uav_altitude_min + 1.0e-9:
+            return False, "altitude_boundary"
         if not 0 <= int(selected_iot_index) <= self.num_iot:
             return False, "invalid_action"
         if not 0 <= int(communication_mode) < NUM_COMMUNICATION_MODES:
@@ -346,9 +591,8 @@ class UAVBackscatterEnv(gym.Env):
         if selected_iot_index == 0:
             return False, "missing_target"
 
-        uav = self.uavs[int(uav_id)]
         target = self.iot_devices[selected_iot_index - 1]
-        if distance_2d(uav, target) > uav.coverage_radius:
+        if not self._in_coverage(uav, target):
             return False, "out_of_coverage"
         if communication_mode == MODE_HARVEST:
             return (True, "valid") if self.primary_busy else (False, "busy_mode_invalid")
@@ -369,6 +613,17 @@ class UAVBackscatterEnv(gym.Env):
             return True, "valid"
         return False, "invalid_action"
 
+    @staticmethod
+    def _parse_position_config(value: Any, default_x: float, default_y: float, default_z: float) -> tuple[float, float, float]:
+        if value is None:
+            return float(default_x), float(default_y), float(default_z)
+        coords = list(value)
+        if len(coords) >= 3:
+            return float(coords[0]), float(coords[1]), float(coords[2])
+        if len(coords) == 2:
+            return float(coords[0]), float(coords[1]), float(default_z)
+        return float(default_x), float(default_y), float(default_z)
+
     def _init_entities(self) -> None:
         self.uavs = []
         for idx in range(self.num_uav):
@@ -379,7 +634,7 @@ class UAVBackscatterEnv(gym.Env):
                     id=idx,
                     x=float(x),
                     y=float(y),
-                    h=float(self.uav_cfg.get("altitude", 100.0)),
+                    z=self.uav_initial_altitude,
                     energy=float(self.uav_cfg.get("initial_energy", 1000.0)),
                     coverage_radius=float(self.uav_cfg.get("coverage_radius", 180.0)),
                     max_speed=float(self.uav_cfg.get("max_speed", 20.0)),
@@ -387,6 +642,8 @@ class UAVBackscatterEnv(gym.Env):
             )
 
         device_types = list(self.iot_cfg.get("device_types", []))
+        iot_altitude = float(self.iot_cfg.get("altitude", 0.0))
+        iot_initial_positions = self.iot_cfg.get("initial_positions", []) or []
         self.iot_devices = []
         for idx in range(self.num_iot):
             device_type = int(device_types[idx]) if idx < len(device_types) else 1
@@ -401,42 +658,56 @@ class UAVBackscatterEnv(gym.Env):
             queue_capacity = int(type_cfg.get("queue_capacity", self.iot_cfg.get("queue_capacity", 10)))
             packet_arrival_prob = float(type_cfg.get("packet_arrival_prob", self.iot_cfg.get("packet_arrival_prob", 0.5)))
             initial_energy = float(self.rng.uniform(energy_min, energy_max))
+            default_x = float(self.rng.uniform(0.1 * self.area_width, 0.9 * self.area_width))
+            default_y = float(self.rng.uniform(0.1 * self.area_height, 0.9 * self.area_height))
+            position_cfg = iot_initial_positions[idx] if idx < len(iot_initial_positions) else None
+            x, y, z = self._parse_position_config(position_cfg, default_x, default_y, iot_altitude)
             self.iot_devices.append(
                 IoTDevice(
                     id=idx,
-                    x=float(self.rng.uniform(0.1 * self.area_width, 0.9 * self.area_width)),
-                    y=float(self.rng.uniform(0.1 * self.area_height, 0.9 * self.area_height)),
+                    x=x,
+                    y=y,
                     device_type=device_type,
                     queue=0,
                     queue_capacity=queue_capacity,
                     energy=initial_energy,
                     energy_capacity=energy_capacity,
                     packet_arrival_prob=packet_arrival_prob,
+                    z=z,
                 )
             )
 
         self.rf_sources = []
+        rf_source_altitude = float(self.rf_source_cfg.get("altitude", 0.0))
+        rf_source_initial_positions = self.rf_source_cfg.get("initial_positions", []) or []
         for idx in range(self.num_rf_sources):
+            default_x = float((idx + 1) * self.area_width / (self.num_rf_sources + 1))
+            default_y = float(0.5 * self.area_height)
+            position_cfg = rf_source_initial_positions[idx] if idx < len(rf_source_initial_positions) else None
+            x, y, z = self._parse_position_config(position_cfg, default_x, default_y, rf_source_altitude)
             self.rf_sources.append(
                 RFSource(
                     id=idx,
-                    x=float((idx + 1) * self.area_width / (self.num_rf_sources + 1)),
-                    y=float(0.5 * self.area_height),
+                    x=x,
+                    y=y,
                     tx_power=float(self.channel_cfg.get("tx_power_rf_source", 1.0)),
                     busy_prob=float(self.channel_cfg.get("primary_busy_prob", 0.5)),
+                    z=z,
                 )
             )
 
         self.jammers = []
         jammer_enabled = bool(self.jammer_cfg.get("enabled", True))
         if jammer_enabled:
-            initial_positions = self.jammer_cfg.get("initial_positions", [])
+            initial_positions = self.jammer_cfg.get("initial_positions", []) or []
+            jammer_altitude = float(self.jammer_cfg.get("altitude", 0.0))
             for idx in range(self.configured_num_jammer):
                 if idx < len(initial_positions):
-                    x, y = initial_positions[idx]
+                    x, y, z = self._parse_position_config(initial_positions[idx], 0.0, 0.0, jammer_altitude)
                 else:
                     x = self.area_width * (0.5 + 0.15 * (idx % 2))
                     y = self.area_height * 0.5
+                    z = jammer_altitude
                 initial_energy = float(self.jammer_cfg.get("initial_energy", 0.0))
                 energy_threshold = float(self.jammer_cfg.get("energy_threshold", 5.0))
                 self.jammers.append(
@@ -451,6 +722,7 @@ class UAVBackscatterEnv(gym.Env):
                         energy=initial_energy,
                         energy_capacity=float(self.jammer_cfg.get("energy_capacity", 100.0)),
                         is_active=initial_energy >= energy_threshold,
+                        z=z,
                     )
                 )
 
@@ -493,6 +765,22 @@ class UAVBackscatterEnv(gym.Env):
             "jammer_active_steps": 0.0,
             "jammer_inactive_steps": 0.0,
         }
+        if self._is_3d_environment():
+            self.episode_totals.update(
+                {
+                    "uav_altitude_sum": 0.0,
+                    "uav_altitude_observations": 0.0,
+                    "min_uav_altitude": float("inf"),
+                    "max_uav_altitude": float("-inf"),
+                    "vertical_action_count": 0.0,
+                    "vertical_movement_total": 0.0,
+                    "altitude_boundary_hits": 0.0,
+                    "uav_iot_3d_distance_sum": 0.0,
+                    "uav_iot_3d_distance_observations": 0.0,
+                    "uav_jammer_3d_distance_sum": 0.0,
+                    "uav_jammer_3d_distance_observations": 0.0,
+                }
+            )
         self.last_frame_metrics = {}
         self.last_reward_breakdown = {}
 
@@ -526,6 +814,14 @@ class UAVBackscatterEnv(gym.Env):
             "greedy_fallback_count": 0.0,
             "avoidance_bonus": 0.0,
         }
+        if self._is_3d_environment():
+            metrics.update(
+                {
+                    "vertical_action_count": 0.0,
+                    "vertical_movement_total": 0.0,
+                    "altitude_boundary_hits": 0.0,
+                }
+            )
         metrics["greedy_fallback_count"] = float(self.pending_policy_fallbacks)
         self.pending_policy_fallbacks = 0.0
         selected_targets: list[int] = []
@@ -535,14 +831,39 @@ class UAVBackscatterEnv(gym.Env):
                 continue
             metrics["actions_processed"] += 1.0
             valid_action = 0 <= int(action_id) < self.action_size
-            movement_action, selected_iot_index, communication_mode = decode_action(int(action_id), self.num_iot)
+            movement_action, selected_iot_index, communication_mode = decode_action(
+                int(action_id),
+                self.num_iot,
+                self.num_movement_actions,
+            )
             self._record_mode_usage(metrics, communication_mode)
             if not valid_action:
                 self._record_invalid_action(metrics, "invalid_action")
 
             before_jammer_distance = self._nearest_jammer_distance(uav)
+            before_z = float(uav.z)
+            is_vertical_action = int(movement_action) in (MOVE_UP, MOVE_DOWN)
+            if self._is_3d_environment() and is_vertical_action:
+                metrics["vertical_action_count"] += 1.0
             movement_energy = compute_movement_energy(movement_action, float(self.uav_cfg.get("movement_energy_cost", 0.1)))
-            move_uav(uav, movement_action, uav.max_speed, self.area_width, self.area_height)
+            move_uav(
+                uav,
+                movement_action,
+                self.uav_horizontal_step,
+                self.area_width,
+                self.area_height,
+                self.uav_vertical_step,
+                self.uav_altitude_min,
+                self.uav_altitude_max,
+            )
+            if self._is_3d_environment():
+                after_z = float(uav.z)
+                metrics["vertical_movement_total"] += abs(after_z - before_z)
+                if is_vertical_action and (
+                    abs(after_z - self.uav_altitude_min) <= 1.0e-9
+                    or abs(after_z - self.uav_altitude_max) <= 1.0e-9
+                ):
+                    metrics["altitude_boundary_hits"] += 1.0
             metrics["uav_energy_used"] += uav.consume_energy(movement_energy)
             after_jammer_distance = self._nearest_jammer_distance(uav)
 
@@ -567,7 +888,7 @@ class UAVBackscatterEnv(gym.Env):
                 continue
 
             selected_targets.append(target.id)
-            if distance_2d(uav, target) > uav.coverage_radius:
+            if not self._in_coverage(uav, target):
                 self._record_invalid_action(metrics, "out_of_coverage")
                 continue
 
@@ -624,14 +945,7 @@ class UAVBackscatterEnv(gym.Env):
 
     def _attempt_backscatter(self, iot: IoTDevice, uav: UAV) -> tuple[int, bool]:
         effective_tx_power = float(self.channel_cfg.get("tx_power_rf_source", 1.0)) * self._backscatter_tx_power_factor(iot)
-        sinr = compute_sinr(
-            effective_tx_power,
-            iot,
-            uav,
-            self.jammers,
-            float(self.channel_cfg.get("noise_power", 1.0e-9)),
-            float(self.channel_cfg.get("path_loss_exponent", 2.2)),
-        )
+        sinr = self._compute_sinr(effective_tx_power, iot, uav)
         success_prob = success_probability_from_sinr(sinr, float(self.channel_cfg.get("sinr_threshold", 1.0)))
         if self.rng.random() < success_prob:
             delivered = iot.remove_packets(self._backscatter_packets_per_slot(iot))
@@ -640,14 +954,7 @@ class UAVBackscatterEnv(gym.Env):
         return 0, self._is_jamming_related_failure(sinr, uav)
 
     def _attempt_active(self, iot: IoTDevice, uav: UAV) -> tuple[int, bool]:
-        sinr = compute_sinr(
-            float(self.channel_cfg.get("tx_power_iot", 0.1)),
-            iot,
-            uav,
-            self.jammers,
-            float(self.channel_cfg.get("noise_power", 1.0e-9)),
-            float(self.channel_cfg.get("path_loss_exponent", 2.2)),
-        )
+        sinr = self._compute_sinr(float(self.channel_cfg.get("tx_power_iot", 0.1)), iot, uav)
         success_prob = success_probability_from_sinr(sinr, float(self.channel_cfg.get("sinr_threshold", 1.0)))
         if self.rng.random() < success_prob:
             delivered = iot.remove_packets(self._active_packets_per_slot(iot))
@@ -660,8 +967,7 @@ class UAVBackscatterEnv(gym.Env):
             return False
         threshold = float(self.channel_cfg.get("sinr_threshold", 1.0))
         noise_power = float(self.channel_cfg.get("noise_power", 1.0e-9))
-        exponent = float(self.channel_cfg.get("path_loss_exponent", 2.2))
-        interference = sum(jammer_interference(jammer, receiver, exponent) for jammer in self.jammers)
+        interference = sum(self._jammer_interference(jammer, receiver) for jammer in self.jammers)
         return bool(sinr < threshold and interference > noise_power)
 
     def _active_energy_cost(self, iot: IoTDevice) -> float:
@@ -698,7 +1004,7 @@ class UAVBackscatterEnv(gym.Env):
             return 0.0
         raw_power = received_power(
             rf_source.tx_power,
-            distance_3d(rf_source, jammer),
+            select_distance(rf_source, jammer, self._channel_distance_mode()),
             float(self.channel_cfg.get("path_loss_exponent", 2.2)),
         )
         efficiency = float(self.jammer_cfg.get("harvest_efficiency", 0.5))
@@ -765,9 +1071,7 @@ class UAVBackscatterEnv(gym.Env):
                 jammer.measured_rssi = float(sum(
                     received_power(
                         rf.tx_power,
-                        max(float(np.sqrt(
-                            (jammer.x - rf.x) ** 2 + (jammer.y - rf.y) ** 2
-                        )), 1.0),
+                        select_distance(jammer, rf, self._channel_distance_mode(), min_distance=1.0),
                         path_loss_exp,
                     )
                     for rf in self.rf_sources
@@ -862,9 +1166,38 @@ class UAVBackscatterEnv(gym.Env):
             "jammer_inactive_steps": float(self.episode_totals.get("jammer_inactive_steps", 0.0)),
             "jammer_harvested_energy_total": float(self.episode_totals.get("jammer_harvested_energy_total", 0.0)),
         }
+        metrics.update(self._episode_3d_metrics(actions_processed))
         metrics.update(self._flatten_named_values("per_uav_served_packets_uav", self.per_uav_served_packets))
         metrics.update(self._flatten_named_values("per_iot_delivered_packets_iot", self.delivered_per_iot))
         return metrics
+
+    def _episode_3d_metrics(self, actions_processed: float) -> dict[str, float]:
+        if not self._is_3d_environment():
+            return {}
+        altitude_observations = self.episode_totals.get("uav_altitude_observations", 0.0)
+        iot_distance_observations = self.episode_totals.get("uav_iot_3d_distance_observations", 0.0)
+        jammer_distance_observations = self.episode_totals.get("uav_jammer_3d_distance_observations", 0.0)
+        if altitude_observations <= 0.0:
+            current = self._current_3d_state_metrics()
+            min_altitude = current.get("min_uav_altitude", 0.0)
+            max_altitude = current.get("max_uav_altitude", 0.0)
+        else:
+            min_altitude = self.episode_totals.get("min_uav_altitude", 0.0)
+            max_altitude = self.episode_totals.get("max_uav_altitude", 0.0)
+        return {
+            "avg_uav_altitude": float(self.episode_totals.get("uav_altitude_sum", 0.0) / max(altitude_observations, 1.0)),
+            "min_uav_altitude": float(min_altitude),
+            "max_uav_altitude": float(max_altitude),
+            "vertical_action_rate": float(self.episode_totals.get("vertical_action_count", 0.0) / max(actions_processed, 1.0)),
+            "avg_vertical_movement": float(self.episode_totals.get("vertical_movement_total", 0.0) / max(actions_processed, 1.0)),
+            "avg_uav_iot_3d_distance": float(
+                self.episode_totals.get("uav_iot_3d_distance_sum", 0.0) / max(iot_distance_observations, 1.0)
+            ),
+            "avg_uav_jammer_3d_distance": float(
+                self.episode_totals.get("uav_jammer_3d_distance_sum", 0.0) / max(jammer_distance_observations, 1.0)
+            ),
+            "altitude_boundary_hits": float(self.episode_totals.get("altitude_boundary_hits", 0.0)),
+        }
 
     def _diagnostic_frame_metrics(self, metrics: dict[str, float]) -> dict[str, float]:
         attempted_backscatter = metrics.get("attempted_backscatter_packets", 0.0)
@@ -893,6 +1226,20 @@ class UAVBackscatterEnv(gym.Env):
         }
         frame.update(self._flatten_named_values("per_uav_served_packets_uav", self.per_uav_served_packets))
         frame.update(self._flatten_named_values("per_iot_delivered_packets_iot", self.delivered_per_iot))
+        return frame
+
+    def _diagnostic_3d_frame_metrics(self, action_metrics: dict[str, float], state_metrics: dict[str, float]) -> dict[str, float]:
+        if not self._is_3d_environment():
+            return {}
+        actions_processed = action_metrics.get("actions_processed", 0.0)
+        frame = dict(state_metrics)
+        frame.update(
+            {
+                "vertical_action_rate": float(action_metrics.get("vertical_action_count", 0.0) / max(actions_processed, 1.0)),
+                "avg_vertical_movement": float(action_metrics.get("vertical_movement_total", 0.0) / max(actions_processed, 1.0)),
+                "altitude_boundary_hits": float(action_metrics.get("altitude_boundary_hits", 0.0)),
+            }
+        )
         return frame
 
     def _flatten_named_values(self, prefix: str, values: np.ndarray) -> dict[str, float]:
@@ -925,4 +1272,4 @@ class UAVBackscatterEnv(gym.Env):
     def _nearest_jammer_distance(self, uav: UAV) -> float:
         if not self.jammers:
             return float(np.hypot(self.area_width, self.area_height))
-        return min(distance_2d(uav, jammer) for jammer in self.jammers)
+        return min(select_distance(uav, jammer, self._jammer_influence_distance_mode()) for jammer in self.jammers)

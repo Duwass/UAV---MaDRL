@@ -1,0 +1,122 @@
+simulation:
+  seed: 42
+  area_width: 500
+  area_height: 500
+  frame_length: 10
+  episode_length: 200
+  max_steps: 200
+
+environment:
+  dimension: 3
+
+network:
+  num_uav: 2
+  num_iot: 15
+  num_jammer: 1
+  num_rf_sources: 1
+
+iot:
+  altitude: 0.0
+  queue_capacity: 30
+  energy_capacity: 12
+  packet_arrival_prob: 0.04
+  backscatter_packets_per_slot: 1
+  active_packets_per_slot: 2
+  harvested_energy_per_busy_slot: 1
+  active_energy_cost_per_slot: 1
+  initial_energy_min: 2
+  initial_energy_max: 6
+  device_types: [1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3]
+  type_params:
+    1:
+      active_packets_per_slot: 2
+      active_energy_cost_per_slot: 1
+      backscatter_packets_per_slot: 1
+      initial_energy_min: 4
+      initial_energy_max: 8
+      energy_capacity: 15
+      backscatter_tx_power_factor: 0.03
+    2:
+      active_packets_per_slot: 2
+      active_energy_cost_per_slot: 2
+      backscatter_packets_per_slot: 2
+      initial_energy_min: 1
+      initial_energy_max: 4
+      energy_capacity: 10
+      backscatter_tx_power_factor: 0.08
+    3:
+      active_packets_per_slot: 1
+      active_energy_cost_per_slot: 3
+      backscatter_packets_per_slot: 1
+      initial_energy_min: 0
+      initial_energy_max: 2
+      energy_capacity: 6
+      harvested_energy_per_busy_slot: 1.5
+      backscatter_tx_power_factor: 0.06
+
+uav:
+  altitude: 100
+  altitude_min: 60
+  altitude_max: 140
+  initial_altitude: 100
+  num_movement_actions: 11
+  horizontal_step: 20
+  vertical_step: 20
+  max_speed: 20
+  coverage_radius: 230
+  initial_energy: 1000
+  movement_energy_cost: 0.1
+  communication_energy_cost: 0.05
+  collision_distance: 20
+
+rf_source:
+  altitude: 0.0
+
+coverage:
+  distance_mode: "3d"
+
+channel:
+  distance_mode: "3d"
+  noise_power: 1.0e-9
+  path_loss_exponent: 2.2
+  tx_power_iot: 0.1
+  tx_power_rf_source: 1.0
+  backscatter_tx_power_factor: 0.04
+  sinr_threshold: 1.0
+  primary_busy_prob: 0.8
+  allow_active_when_busy: false
+
+jammer:
+  enabled: true
+  mobility: "chase_nearest_uav"
+  altitude: 100
+  influence_distance_mode: "3d"
+  power: 0.2
+  speed: 12
+  radius: 160
+  # Energy harvesting params
+  initial_energy: 50.0
+  energy_capacity: 50.0
+  harvest_efficiency: 0.5
+  jam_energy_cost: 0.5
+  energy_threshold: 5.0
+  resume_threshold: 30.0
+
+reward:
+  w_throughput: 1.0
+  w_drop: 2.0
+  w_delay: 0.1
+  w_uav_energy: 0.01
+  w_jamming: 1.0
+  w_collision: 5.0
+  w_unfairness: 0.2
+  w_avoid_jammer: 0.2
+
+evaluation:
+  num_episodes: 20
+  save_csv: true
+  save_plots: true
+
+action_masking:
+  enabled: true
+  random_uses_mask: true

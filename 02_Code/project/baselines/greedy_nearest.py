@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from baselines import closest_target, format_actions, masked_fallback_action, movement_toward, unwrap_env
-from envs.channel_model import distance_2d
+from baselines import closest_target, format_actions, in_coverage, masked_fallback_action, movement_toward, unwrap_env
 from envs.uav_backscatter_env import MODE_ACTIVE, MODE_BACKSCATTER, MODE_HARVEST, MODE_IDLE, encode_action
 
 
@@ -19,10 +18,10 @@ class GreedyNearestPolicy:
                 actions.append(masked_fallback_action(base_env, uav_id, encode_action(0, 0, MODE_IDLE, base_env.num_iot)))
                 continue
             taken.add(target.id)
-            in_coverage = distance_2d(uav, target) <= uav.coverage_radius
-            movement = 0 if in_coverage else movement_toward(uav, target)
+            covered = in_coverage(base_env, uav, target)
+            movement = 0 if covered else movement_toward(uav, target)
             mode = MODE_IDLE
-            if in_coverage:
+            if covered:
                 if base_env.primary_busy:
                     mode = MODE_BACKSCATTER if target.queue > 0 else MODE_HARVEST
                 elif target.can_active_transmit(base_env._active_energy_cost(target)):

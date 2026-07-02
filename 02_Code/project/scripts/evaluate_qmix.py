@@ -25,6 +25,13 @@ def main() -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output, index=False)
     summary = df.mean(numeric_only=True)
+    extra = ""
+    if "avg_uav_altitude" in summary:
+        extra = (
+            f" avg_altitude={summary.get('avg_uav_altitude', 0.0):.4f}"
+            f" vertical_rate={summary.get('vertical_action_rate', 0.0):.4f}"
+            f" uav_jammer_3d={summary.get('avg_uav_jammer_3d_distance', 0.0):.4f}"
+        )
     print(f"Saved final eval CSV to {output}")
     print(
         "summary "
@@ -34,9 +41,9 @@ def main() -> None:
         f"jam={summary.get('jamming_failure_rate', 0.0):.4f} "
         f"fairness={summary.get('fairness_index', 0.0):.4f} "
         f"fallback={summary.get('fallback_rate', 0.0):.4f}"
+        f"{extra}"
     )
 
 
 if __name__ == "__main__":
     main()
-

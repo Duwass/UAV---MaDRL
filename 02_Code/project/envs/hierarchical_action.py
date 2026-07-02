@@ -71,6 +71,15 @@ class HierarchicalActionExecutor:
     def decode_high_level_action(self, high_action_id: int) -> str:
         return HIGH_LEVEL_ACTION_NAMES.get(int(high_action_id), "IDLE_SAFE")
 
+    def _encode_action(self, movement: int, selected_iot_index: int, mode: int) -> int:
+        return encode_action(
+            movement,
+            selected_iot_index,
+            mode,
+            self.env.num_iot,
+            int(getattr(self.env, "num_movement_actions", 9)),
+        )
+
     def build_original_actions(self, high_level_actions: list[int]) -> list[int]:
         actions: list[int] = []
         fallback_count = 0
@@ -113,7 +122,7 @@ class HierarchicalActionExecutor:
         fallback = False
         if high_action == AVOID_JAMMER and self.env.jammers:
             movement = self._movement_away_from_jammer(uav)
-            action = encode_action(movement, 0, MODE_AVOID_JAMMER, self.env.num_iot)
+            action = self._encode_action(movement, 0, MODE_AVOID_JAMMER)
             return ExecutorDecision(action, -1, MODE_AVOID_JAMMER, False)
         if high_action == IDLE_SAFE:
             safe_target = self._select_best_sinr_target(uav, require_queue=True)
@@ -121,14 +130,14 @@ class HierarchicalActionExecutor:
                 mode = self._select_mode(uav, safe_target, safe_only=True)
                 if mode != MODE_IDLE:
                     return self._decision(uav, safe_target, mode, fallback=False)
-            return ExecutorDecision(encode_action(0, 0, MODE_IDLE, self.env.num_iot), -1, MODE_IDLE, False)
+            return ExecutorDecision(self._encode_action(0, 0, MODE_IDLE), -1, MODE_IDLE, False)
 
         target = self._select_target(uav, high_action)
         if target is None:
             target = self._fallback_target(uav)
             fallback = True
         if target is None:
-            return ExecutorDecision(encode_action(0, 0, MODE_IDLE, self.env.num_iot), -1, MODE_IDLE, True)
+            return ExecutorDecision(self._encode_action(0, 0, MODE_IDLE), -1, MODE_IDLE, True)
 
         mode = self._select_mode(uav, target, high_action=high_action)
         if not self._is_mode_valid_now(uav, target, mode):
@@ -144,7 +153,7 @@ class HierarchicalActionExecutor:
         movement = 0 if mode not in (MODE_IDLE, MODE_AVOID_JAMMER) and self._in_coverage(uav, target) else self._movement_toward(uav, target)
         if mode == MODE_IDLE:
             selected = 0
-        action = encode_action(movement, selected, mode, self.env.num_iot)
+        action = self._encode_action(movement, selected, mode)
         return ExecutorDecision(action, int(target.id) if target is not None else -1, int(mode), bool(fallback))
 
     def _select_target(self, uav, high_action: int):
@@ -291,19 +300,26 @@ class HierarchicalActionExecutor:
 
     def score_sinr(self, uav, iot) -> float:
         tx_power = float(self.env.channel_cfg.get("tx_power_iot", 0.1))
-        sinr = compute_sinr(
-            tx_power,
-            iot,
-            uav,
-            self.env.jammers,
-            float(self.env.channel_cfg.get("noise_power", 1.0e-9)),
-            float(self.env.channel_cfg.get("path_loss_exponent", 2.2)),
-        )
+        if hasattr(self.env, "_compute_sinr"):
+            sinr = self.env._compute_sinr(tx_power, iot, uav)
+        else:
+            sinr = compute_sinr(
+                tx_power,
+                iot,
+                uav,
+                self.env.jammers,
+                float(self.env.channel_cfg.get("noise_power", 1.0e-9)),
+                float(self.env.channel_cfg.get("path_loss_exponent", 2.2)),
+            )
         threshold = float(self.env.channel_cfg.get("sinr_threshold", 1.0))
         return float(sinr / max(sinr + threshold, 1.0e-12))
 
     def score_distance(self, uav, iot) -> float:
-        return float(min(1.0, distance_2d(uav, iot) / max(uav.coverage_radius, 1.0)))
+        if hasattr(self.env, "_coverage_distance"):
+            dist = self.env._coverage_distance(uav, iot)
+        else:
+            dist = distance_2d(uav, iot)
+        return float(min(1.0, dist / max(uav.coverage_radius, 1.0)))
 
     def score_energy_need(self, iot) -> float:
         return float(1.0 - min(1.0, iot.energy / max(iot.energy_capacity, 1.0e-12)))
@@ -328,6 +344,8 @@ class HierarchicalActionExecutor:
         return float(min(1.0, nearest / radius))
 
     def _in_coverage(self, uav, iot) -> bool:
+        if hasattr(self.env, "_in_coverage"):
+            return bool(self.env._in_coverage(uav, iot))
         return distance_2d(uav, iot) <= float(uav.coverage_radius)
 
     def _in_coverage_score(self, uav, iot) -> float:
@@ -352,7 +370,7 @@ class HierarchicalActionExecutor:
         best_action = 0
         best_dot = -np.inf
         for action, delta in MOVEMENT_DELTAS.items():
-            vector = np.asarray(delta, dtype=np.float64)
+            vector = np.asarray(delta[:2], dtype=np.float64)
             norm = float(np.linalg.norm(vector))
             if norm <= 0.0:
                 continue

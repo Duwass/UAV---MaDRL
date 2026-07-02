@@ -52,7 +52,17 @@ def main() -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     combined.to_csv(output_path, index=False)
     grouped = combined.groupby(["scenario_name", "policy_name"]).mean(numeric_only=True)
-    print(grouped[["total_throughput", "packet_drop_rate", "energy_efficiency", "jamming_failure_rate", "fairness_index"]].round(4))
+    summary_columns = [
+        "total_throughput",
+        "packet_drop_rate",
+        "energy_efficiency",
+        "jamming_failure_rate",
+        "fairness_index",
+        "avg_uav_altitude",
+        "vertical_action_rate",
+        "avg_uav_jammer_3d_distance",
+    ]
+    print(grouped[[column for column in summary_columns if column in grouped.columns]].round(4))
     print(f"Saved combined CSV to {output_path}")
 
 

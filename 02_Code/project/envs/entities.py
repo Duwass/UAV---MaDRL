@@ -10,26 +10,57 @@ def _clip_position(x: float, y: float, area_width: float, area_height: float) ->
     return float(np.clip(x, 0.0, area_width)), float(np.clip(y, 0.0, area_height))
 
 
-@dataclass
+@dataclass(init=False)
 class UAV:
     id: int
     x: float
     y: float
-    h: float
+    z: float
     energy: float
     coverage_radius: float
     max_speed: float
     current_target: int | None = None
     last_action: int | None = None
 
+    def __init__(
+        self,
+        id: int,
+        x: float,
+        y: float,
+        z: float | None = None,
+        energy: float = 0.0,
+        coverage_radius: float = 0.0,
+        max_speed: float = 0.0,
+        current_target: int | None = None,
+        last_action: int | None = None,
+        h: float | None = None,
+    ):
+        self.id = int(id)
+        self.x = float(x)
+        self.y = float(y)
+        self.z = float(h if z is None and h is not None else (0.0 if z is None else z))
+        self.energy = float(energy)
+        self.coverage_radius = float(coverage_radius)
+        self.max_speed = float(max_speed)
+        self.current_target = current_target
+        self.last_action = last_action
+
+    @property
+    def h(self) -> float:
+        return self.z
+
+    @h.setter
+    def h(self, value: float) -> None:
+        self.z = float(value)
+
     def position(self) -> tuple[float, float, float]:
-        return self.x, self.y, self.h
+        return self.x, self.y, self.z
 
     def distance_to(self, entity: object) -> float:
         ex = float(getattr(entity, "x"))
         ey = float(getattr(entity, "y"))
-        eh = float(getattr(entity, "h", 0.0))
-        return float(np.sqrt((self.x - ex) ** 2 + (self.y - ey) ** 2 + (self.h - eh) ** 2))
+        ez = float(getattr(entity, "z", getattr(entity, "h", 0.0)))
+        return float(np.sqrt((self.x - ex) ** 2 + (self.y - ey) ** 2 + (self.z - ez) ** 2))
 
     def consume_energy(self, amount: float) -> float:
         amount = max(0.0, float(amount))
@@ -55,9 +86,18 @@ class IoTDevice:
     total_arrived: int = 0
     total_delivered: int = 0
     total_dropped: int = 0
+    z: float = 0.0
 
-    def position(self) -> tuple[float, float]:
-        return self.x, self.y
+    @property
+    def h(self) -> float:
+        return self.z
+
+    @h.setter
+    def h(self, value: float) -> None:
+        self.z = float(value)
+
+    def position(self) -> tuple[float, float, float]:
+        return self.x, self.y, self.z
 
     def generate_packets(self, rng: np.random.Generator, frame_length: int) -> tuple[int, int]:
         arrivals = int(rng.binomial(int(frame_length), float(self.packet_arrival_prob)))
@@ -107,9 +147,18 @@ class Jammer:
     last_rssi: float = 0.0
     last_dx: float = 0.0 
     last_dy: float = 0.0
+    z: float = 0.0
 
-    def position(self) -> tuple[float, float]:
-        return self.x, self.y
+    @property
+    def h(self) -> float:
+        return self.z
+
+    @h.setter
+    def h(self, value: float) -> None:
+        self.z = float(value)
+
+    def position(self) -> tuple[float, float, float]:
+        return self.x, self.y, self.z
 
     def harvest_energy(self, amount: float) -> float:
         amount = max(0.0, float(amount))
@@ -216,9 +265,18 @@ class RFSource:
     y: float
     tx_power: float
     busy_prob: float
+    z: float = 0.0
 
-    def position(self) -> tuple[float, float]:
-        return self.x, self.y
+    @property
+    def h(self) -> float:
+        return self.z
+
+    @h.setter
+    def h(self, value: float) -> None:
+        self.z = float(value)
+
+    def position(self) -> tuple[float, float, float]:
+        return self.x, self.y, self.z
 
     def is_busy(self, rng: np.random.Generator) -> bool:
         return bool(rng.random() < self.busy_prob)
