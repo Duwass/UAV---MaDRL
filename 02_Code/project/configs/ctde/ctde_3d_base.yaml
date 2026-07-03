@@ -1,0 +1,27 @@
+env_config_path: configs/scenario_4_3d_backscatter_types_calibrated.yaml
+obs_dim: 114
+state_dim: 89
+num_agents: 2
+movement_actions: 11
+target_options: 16
+modes: 6
+actor_hidden_dim: 128
+critic_hidden_dim: 128
+actor_lr: 0.001
+critic_lr: 0.001
+gamma: 0.99
+entropy_coef: 0.0
+seed: 42
+replay_capacity: 128
+
+smoke:
+  num_iterations: 2
+  rollout_steps: 5
+  batch_size: 4
+  epsilon: 0.1
+  eval_episodes: 1
+  eval_max_steps: 5
+
+output:
+  save_results: false
+  save_checkpoint: false
