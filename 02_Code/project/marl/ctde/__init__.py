@@ -4,7 +4,7 @@ from marl.ctde.networks import CentralizedVCritic, FactorizedActor
 from marl.ctde.replay_buffer import CTDEReplayBuffer, CTDETransition
 from marl.ctde.rollout import DecentralizedActionSelection, collect_ctde_rollout, select_decentralized_actions
 from marl.ctde.ctde_trainer import CTDETrainer
-from marl.ctde.train_loop import train_ctde_smoke
+from marl.ctde.train_loop import train_ctde_short_run, train_ctde_smoke
 from marl.ctde.utils import (
     DEFAULT_NUM_IOT,
     DEFAULT_NUM_MODES,
@@ -53,5 +53,6 @@ __all__ = [
     "sanitize_factorized_action",
     "select_factorized_action_from_logits",
     "select_decentralized_actions",
+    "train_ctde_short_run",
     "train_ctde_smoke",
 ]

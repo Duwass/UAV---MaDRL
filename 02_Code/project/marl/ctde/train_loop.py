@@ -27,6 +27,11 @@ def train_ctde_smoke(config: dict[str, Any] | str | Path | None = None) -> dict[
     observations. The centralized critic uses global state only in the update.
     No files, results, or checkpoints are written by this function.
     """
+    return train_ctde_short_run(config)
+
+
+def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> dict[str, Any]:
+    """Run a guarded short CTDE loop and return per-iteration metrics."""
     cfg = _load_ctde_config(config)
     seed = int(cfg.get("seed", 42))
     rng = np.random.default_rng(seed)
@@ -62,11 +67,17 @@ def train_ctde_smoke(config: dict[str, Any] | str | Path | None = None) -> dict[
     rollout_steps = int(smoke_cfg.get("rollout_steps", 5))
     batch_size = int(smoke_cfg.get("batch_size", 4))
     epsilon = float(smoke_cfg.get("epsilon", 0.1))
+    eval_every = int(smoke_cfg.get("eval_every", 0))
+    eval_episodes = int(smoke_cfg.get("eval_episodes", 1))
+    eval_max_steps = int(smoke_cfg.get("eval_max_steps", 5))
 
     metrics_history: list[dict[str, float]] = []
     transitions_collected = 0
     losses_finite = True
-    for _ in range(num_iterations):
+    stopped_early = False
+    warning: str | None = None
+    last_eval_summary: dict[str, Any] = {}
+    for iteration in range(1, num_iterations + 1):
         rollout_summary = collect_ctde_rollout(
             env,
             actor,
@@ -77,23 +88,64 @@ def train_ctde_smoke(config: dict[str, Any] | str | Path | None = None) -> dict[
             use_movement_mask=True,
         )
         transitions_collected += int(rollout_summary["transitions_collected"])
+        row: dict[str, Any] = {
+            "iteration": int(iteration),
+            "transitions_collected": int(transitions_collected),
+            "rollout_transitions": int(rollout_summary["transitions_collected"]),
+            "buffer_size": int(len(buffer)),
+            "actor_loss": None,
+            "critic_loss": None,
+            "mean_value": None,
+            "mean_target": None,
+            "mean_advantage": None,
+            "losses_finite": False,
+            "episode_return": float(rollout_summary.get("episode_return", 0.0)),
+            "rollout_return": float(rollout_summary.get("episode_return", 0.0)),
+            "eval_mean_return": None,
+            "eval_total_steps": 0,
+        }
         if len(buffer) <= 0:
+            metrics_history.append(row)
             continue
         batch = buffer.sample(min(batch_size, len(buffer)), rng=rng)
-        metrics = trainer.update(batch)
-        metrics_history.append(metrics)
-        losses_finite = losses_finite and bool(
-            np.isfinite(metrics["actor_loss"]) and np.isfinite(metrics["critic_loss"])
+        update_metrics = trainer.update(batch)
+        row.update(
+            {
+                "actor_loss": _float_or_none(update_metrics.get("actor_loss")),
+                "critic_loss": _float_or_none(update_metrics.get("critic_loss")),
+                "mean_value": _float_or_none(update_metrics.get("mean_value")),
+                "mean_target": _float_or_none(update_metrics.get("mean_target")),
+                "mean_advantage": _float_or_none(update_metrics.get("mean_advantage")),
+            }
         )
+        row["losses_finite"] = _metrics_are_finite(row, ("actor_loss", "critic_loss", "mean_value", "mean_target", "mean_advantage"))
+        losses_finite = losses_finite and bool(row["losses_finite"])
 
-    eval_summary: dict[str, Any] = {}
-    eval_episodes = int(smoke_cfg.get("eval_episodes", 1))
-    if eval_episodes > 0:
-        eval_summary = evaluate_decentralized_policy(
+        should_eval = eval_every > 0 and eval_episodes > 0 and iteration % eval_every == 0
+        if should_eval:
+            last_eval_summary = evaluate_decentralized_policy(
+                env,
+                actor,
+                num_episodes=eval_episodes,
+                max_steps=eval_max_steps,
+                deterministic=True,
+                rng=rng,
+            )
+            row["eval_mean_return"] = _float_or_none(last_eval_summary.get("mean_return"))
+            row["eval_total_steps"] = int(last_eval_summary.get("total_steps", 0))
+
+        metrics_history.append(row)
+        if not row["losses_finite"]:
+            stopped_early = True
+            warning = "non_finite_loss"
+            break
+
+    if not last_eval_summary and eval_every <= 0 and eval_episodes > 0:
+        last_eval_summary = evaluate_decentralized_policy(
             env,
             actor,
             num_episodes=eval_episodes,
-            max_steps=int(smoke_cfg.get("eval_max_steps", 5)),
+            max_steps=eval_max_steps,
             deterministic=True,
             rng=rng,
         )
@@ -101,13 +153,21 @@ def train_ctde_smoke(config: dict[str, Any] | str | Path | None = None) -> dict[
     last_metrics = metrics_history[-1] if metrics_history else {}
     return {
         "iterations": int(num_iterations),
-        "updates": int(len(metrics_history)),
+        "updates": int(sum(1 for row in metrics_history if row.get("actor_loss") is not None)),
         "transitions_collected": int(transitions_collected),
         "last_actor_loss": _float_or_none(last_metrics.get("actor_loss")),
         "last_critic_loss": _float_or_none(last_metrics.get("critic_loss")),
         "losses_finite": bool(losses_finite and bool(metrics_history)),
-        "eval_mean_return": _float_or_none(eval_summary.get("mean_return")),
-        "eval_total_steps": int(eval_summary.get("total_steps", 0)) if eval_summary else 0,
+        "eval_mean_return": _float_or_none(last_eval_summary.get("mean_return")),
+        "eval_total_steps": int(last_eval_summary.get("total_steps", 0)) if last_eval_summary else 0,
+        "iteration_metrics": metrics_history,
+        "metrics": metrics_history,
+        "stopped_early": bool(stopped_early),
+        "warning": warning,
+        "seed": int(seed),
+        "obs_dim": int(cfg.get("obs_dim", 114)),
+        "state_dim": int(cfg.get("state_dim", 89)),
+        "action_dim": 1056,
     }
 
 
@@ -134,3 +194,7 @@ def _float_or_none(value: Any) -> float | None:
     if value is None:
         return None
     return float(value)
+
+
+def _metrics_are_finite(values: dict[str, Any], keys: tuple[str, ...]) -> bool:
+    return all(values.get(key) is not None and bool(np.isfinite(values[key])) for key in keys)

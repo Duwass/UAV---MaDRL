@@ -18,10 +18,16 @@ smoke:
   num_iterations: 2
   rollout_steps: 5
   batch_size: 4
-  epsilon: 0.1
+  eval_every: 1
   eval_episodes: 1
   eval_max_steps: 5
+  epsilon: 0.1
 
 output:
   save_results: false
   save_checkpoint: false
+  overwrite: false
+  save_metrics_csv: true
+  save_metrics_jsonl: true
+  save_config: true
+  save_reproducibility: true
