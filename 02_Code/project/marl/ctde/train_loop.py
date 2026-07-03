@@ -18,6 +18,25 @@ from marl.ctde.rollout import collect_ctde_rollout
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = PROJECT_ROOT / "configs" / "ctde" / "ctde_3d_base.yaml"
+ENV_METRIC_KEYS: tuple[str, ...] = (
+    "total_throughput",
+    "avg_throughput_per_frame",
+    "packet_drop_rate",
+    "jamming_failure_rate",
+    "jammed_transmission_rate",
+    "fairness_index",
+    "energy_efficiency",
+    "backscatter_success_rate",
+    "active_success_rate",
+    "avg_uav_altitude",
+    "min_uav_altitude",
+    "max_uav_altitude",
+    "vertical_action_rate",
+    "avg_vertical_movement",
+    "avg_uav_iot_3d_distance",
+    "avg_uav_jammer_3d_distance",
+    "altitude_boundary_hits",
+)
 
 
 def train_ctde_smoke(config: dict[str, Any] | str | Path | None = None) -> dict[str, Any]:
@@ -87,6 +106,7 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
             rng=rng,
             use_movement_mask=True,
         )
+        rollout_env_metrics = _extract_env_metrics(rollout_summary.get("episode_metrics"), "rollout_")
         transitions_collected += int(rollout_summary["transitions_collected"])
         row: dict[str, Any] = {
             "iteration": int(iteration),
@@ -104,6 +124,8 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
             "eval_mean_return": None,
             "eval_total_steps": 0,
         }
+        row.update(rollout_env_metrics)
+        row.update(_extract_env_metrics(None, "eval_"))
         if len(buffer) <= 0:
             metrics_history.append(row)
             continue
@@ -133,6 +155,7 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
             )
             row["eval_mean_return"] = _float_or_none(last_eval_summary.get("mean_return"))
             row["eval_total_steps"] = int(last_eval_summary.get("total_steps", 0))
+            row.update(_extract_env_metrics(last_eval_summary.get("last_episode_metrics"), "eval_"))
 
         metrics_history.append(row)
         if not row["losses_finite"]:
@@ -151,7 +174,7 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
         )
 
     last_metrics = metrics_history[-1] if metrics_history else {}
-    return {
+    summary = {
         "iterations": int(num_iterations),
         "updates": int(sum(1 for row in metrics_history if row.get("actor_loss") is not None)),
         "transitions_collected": int(transitions_collected),
@@ -169,6 +192,9 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
         "state_dim": int(cfg.get("state_dim", 89)),
         "action_dim": 1056,
     }
+    summary.update({key: last_metrics.get(key) for key in _prefixed_env_metric_names("rollout_")})
+    summary.update(_extract_env_metrics(last_eval_summary.get("last_episode_metrics"), "eval_"))
+    return summary
 
 
 def _load_ctde_config(config: dict[str, Any] | str | Path | None) -> dict[str, Any]:
@@ -198,3 +224,25 @@ def _float_or_none(value: Any) -> float | None:
 
 def _metrics_are_finite(values: dict[str, Any], keys: tuple[str, ...]) -> bool:
     return all(values.get(key) is not None and bool(np.isfinite(values[key])) for key in keys)
+
+
+def _prefixed_env_metric_names(prefix: str) -> tuple[str, ...]:
+    return tuple(f"{prefix}{key}" for key in ENV_METRIC_KEYS)
+
+
+def _extract_env_metrics(source: Any, prefix: str) -> dict[str, float | None]:
+    metrics = source if isinstance(source, dict) else {}
+    extracted: dict[str, float | None] = {}
+    for key in ENV_METRIC_KEYS:
+        value = metrics.get(key)
+        extracted[f"{prefix}{key}"] = _safe_float_or_none(value)
+    return extracted
+
+
+def _safe_float_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
