@@ -1,8 +1,20 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from marl.ctde.utils import FactorizedAction, sanitize_factorized_action
+
+
+@dataclass(frozen=True)
+class FactorizedActionDecision:
+    raw_action: FactorizedAction
+    action: FactorizedAction
+
+    @property
+    def sanitizer_changed(self) -> bool:
+        return self.raw_action != self.action
 
 
 def select_factorized_action_from_logits(
@@ -13,11 +25,30 @@ def select_factorized_action_from_logits(
     epsilon: float = 0.0,
     rng: np.random.Generator | None = None,
 ) -> FactorizedAction:
+    return select_factorized_action_decision(
+        movement_logits,
+        target_logits,
+        mode_logits,
+        movement_mask=movement_mask,
+        epsilon=epsilon,
+        rng=rng,
+    ).action
+
+
+def select_factorized_action_decision(
+    movement_logits: np.ndarray,
+    target_logits: np.ndarray,
+    mode_logits: np.ndarray,
+    movement_mask: np.ndarray | None = None,
+    epsilon: float = 0.0,
+    rng: np.random.Generator | None = None,
+) -> FactorizedActionDecision:
     rng = rng if rng is not None else np.random.default_rng()
     movement = _select_index(movement_logits, epsilon, rng, movement_mask)
     target = _select_index(target_logits, epsilon, rng)
     mode = _select_index(mode_logits, epsilon, rng)
-    return sanitize_factorized_action(FactorizedAction(movement, target, mode))
+    raw_action = FactorizedAction(movement, target, mode)
+    return FactorizedActionDecision(raw_action=raw_action, action=sanitize_factorized_action(raw_action))
 
 
 def _select_index(

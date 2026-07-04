@@ -6,9 +6,12 @@ from typing import Any
 import numpy as np
 import torch
 
-from marl.ctde.factorized_policy import select_factorized_action_from_logits
+from marl.ctde.action_diagnostics import prefix_action_diagnostics, summarize_action_diagnostics
+from marl.ctde.factorized_policy import select_factorized_action_decision
 from marl.ctde.utils import (
     DEFAULT_NUM_MOVEMENT_ACTIONS,
+    DEFAULT_NUM_MODES,
+    DEFAULT_NUM_TARGETS,
     FactorizedAction,
     build_local_movement_mask_from_obs,
     encode_factorized_action,
@@ -20,6 +23,7 @@ class DecentralizedActionSelection:
     factorized_actions: list[FactorizedAction]
     flat_actions: list[int]
     movement_masks: np.ndarray | None
+    raw_factorized_actions: list[FactorizedAction]
 
 
 def select_decentralized_actions(
@@ -41,6 +45,7 @@ def select_decentralized_actions(
         raise ValueError("observations must have shape [num_agents, obs_dim].")
 
     factorized_actions: list[FactorizedAction] = []
+    raw_factorized_actions: list[FactorizedAction] = []
     flat_actions: list[int] = []
     movement_masks: list[np.ndarray] = []
 
@@ -51,7 +56,7 @@ def select_decentralized_actions(
             if use_movement_mask
             else None
         )
-        action = select_factorized_action_from_logits(
+        decision = select_factorized_action_decision(
             _to_1d_numpy(outputs["movement_logits"]),
             _to_1d_numpy(outputs["target_logits"]),
             _to_1d_numpy(outputs["mode_logits"]),
@@ -59,13 +64,15 @@ def select_decentralized_actions(
             epsilon=epsilon,
             rng=generator,
         )
+        action = decision.action
         factorized_actions.append(action)
         flat_actions.append(encode_factorized_action(action))
+        raw_factorized_actions.append(decision.raw_action)
         if movement_mask is not None:
             movement_masks.append(movement_mask)
 
     masks_array = np.stack(movement_masks) if use_movement_mask else None
-    return DecentralizedActionSelection(factorized_actions, flat_actions, masks_array)
+    return DecentralizedActionSelection(factorized_actions, flat_actions, masks_array, raw_factorized_actions)
 
 
 def collect_ctde_rollout(
@@ -91,6 +98,10 @@ def collect_ctde_rollout(
     terminated = False
     truncated = False
     last_info = dict(info)
+    num_agents = int(np.asarray(observations).shape[0])
+    selected_actions: list[FactorizedAction] = []
+    raw_actions: list[FactorizedAction] = []
+    agent_ids: list[int] = []
 
     while transitions_collected < step_limit and not (terminated or truncated):
         selection = select_decentralized_actions(
@@ -100,6 +111,9 @@ def collect_ctde_rollout(
             rng=rng,
             use_movement_mask=use_movement_mask,
         )
+        selected_actions.extend(selection.factorized_actions)
+        raw_actions.extend(selection.raw_factorized_actions)
+        agent_ids.extend(range(len(selection.factorized_actions)))
         next_observations, reward, terminated, truncated, next_info = env.step(selection.flat_actions)
         next_state = _global_state_from_env_or_info(env, next_info)
         done = bool(terminated or truncated)
@@ -126,6 +140,17 @@ def collect_ctde_rollout(
         state = next_state
         last_info = dict(next_info)
 
+    action_diagnostics = summarize_action_diagnostics(
+        selected_actions,
+        raw_actions=raw_actions,
+        agent_ids=agent_ids,
+        num_agents=num_agents,
+        deterministic=float(epsilon) <= 0.0,
+        epsilon=float(epsilon),
+        movement_count=DEFAULT_NUM_MOVEMENT_ACTIONS,
+        target_count=DEFAULT_NUM_TARGETS,
+        mode_count=DEFAULT_NUM_MODES,
+    )
     return {
         "num_steps": int(transitions_collected),
         "episode_return": float(episode_return),
@@ -134,6 +159,8 @@ def collect_ctde_rollout(
         "truncated": bool(truncated),
         "last_info": last_info,
         "episode_metrics": dict(last_info.get("episode_metrics", {})),
+        "action_diagnostics": action_diagnostics,
+        "rollout_action_diagnostics": prefix_action_diagnostics(action_diagnostics, "rollout_", num_agents=num_agents),
     }
 
 

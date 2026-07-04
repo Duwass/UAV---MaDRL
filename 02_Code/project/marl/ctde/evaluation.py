@@ -4,7 +4,9 @@ from typing import Any
 
 import numpy as np
 
+from marl.ctde.action_diagnostics import prefix_action_diagnostics, summarize_action_diagnostics
 from marl.ctde.rollout import select_decentralized_actions
+from marl.ctde.utils import DEFAULT_NUM_MODES, DEFAULT_NUM_MOVEMENT_ACTIONS, DEFAULT_NUM_TARGETS, FactorizedAction
 
 
 def evaluate_decentralized_policy(
@@ -30,9 +32,14 @@ def evaluate_decentralized_policy(
     frame_metrics: list[dict[str, Any]] = []
     terminated_count = 0
     truncated_count = 0
+    selected_actions: list[FactorizedAction] = []
+    raw_actions: list[FactorizedAction] = []
+    agent_ids: list[int] = []
+    num_agents = 0
 
     for _ in range(int(num_episodes)):
         observations, _ = env.reset()
+        num_agents = max(num_agents, int(np.asarray(observations).shape[0]))
         step_limit = int(max_steps if max_steps is not None else env.max_steps)
         episode_return = 0.0
         steps = 0
@@ -49,6 +56,9 @@ def evaluate_decentralized_policy(
                 rng=generator,
                 use_movement_mask=use_movement_mask,
             )
+            selected_actions.extend(selection.factorized_actions)
+            raw_actions.extend(selection.raw_factorized_actions)
+            agent_ids.extend(range(len(selection.factorized_actions)))
             observations, reward, terminated, truncated, info = env.step(selection.flat_actions)
             episode_return += float(reward)
             steps += 1
@@ -63,6 +73,17 @@ def evaluate_decentralized_policy(
         truncated_count += int(bool(truncated))
 
     mean_return = float(np.mean(episode_returns)) if episode_returns else 0.0
+    action_diagnostics = summarize_action_diagnostics(
+        selected_actions,
+        raw_actions=raw_actions,
+        agent_ids=agent_ids,
+        num_agents=num_agents,
+        deterministic=bool(deterministic),
+        epsilon=0.0 if deterministic else 1.0,
+        movement_count=DEFAULT_NUM_MOVEMENT_ACTIONS,
+        target_count=DEFAULT_NUM_TARGETS,
+        mode_count=DEFAULT_NUM_MODES,
+    )
     return {
         "episodes": int(num_episodes),
         "total_steps": int(sum(episode_steps)),
@@ -75,4 +96,6 @@ def evaluate_decentralized_policy(
         "frame_metrics": frame_metrics,
         "last_episode_metrics": episode_metrics[-1] if episode_metrics else {},
         "last_frame_metrics": frame_metrics[-1] if frame_metrics else {},
+        "action_diagnostics": action_diagnostics,
+        "eval_action_diagnostics": prefix_action_diagnostics(action_diagnostics, "eval_", num_agents=max(num_agents, 1)),
     }

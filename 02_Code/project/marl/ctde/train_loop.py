@@ -9,6 +9,7 @@ import torch
 import yaml
 
 from envs.uav_backscatter_env import UAVBackscatterEnv, load_config
+from marl.ctde.action_diagnostics import prefix_action_diagnostics, prefixed_action_diagnostic_keys
 from marl.ctde.ctde_trainer import CTDETrainer
 from marl.ctde.evaluation import evaluate_decentralized_policy
 from marl.ctde.networks import CentralizedVCritic, FactorizedActor
@@ -59,6 +60,7 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
     env_cfg = load_config(_resolve_project_path(cfg.get("env_config_path")))
     env_cfg.setdefault("simulation", {})["seed"] = seed
     env = UAVBackscatterEnv(env_cfg)
+    num_agents = int(cfg.get("num_agents", getattr(env, "num_uav", 2)))
 
     actor = FactorizedActor(
         obs_dim=int(cfg.get("obs_dim", 114)),
@@ -107,6 +109,7 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
             use_movement_mask=True,
         )
         rollout_env_metrics = _extract_env_metrics(rollout_summary.get("episode_metrics"), "rollout_")
+        rollout_action_metrics = prefix_action_diagnostics(rollout_summary.get("action_diagnostics"), "rollout_", num_agents=num_agents)
         transitions_collected += int(rollout_summary["transitions_collected"])
         row: dict[str, Any] = {
             "iteration": int(iteration),
@@ -125,7 +128,9 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
             "eval_total_steps": 0,
         }
         row.update(rollout_env_metrics)
+        row.update(rollout_action_metrics)
         row.update(_extract_env_metrics(None, "eval_"))
+        row.update(prefix_action_diagnostics(None, "eval_", num_agents=num_agents))
         if len(buffer) <= 0:
             metrics_history.append(row)
             continue
@@ -156,6 +161,7 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
             row["eval_mean_return"] = _float_or_none(last_eval_summary.get("mean_return"))
             row["eval_total_steps"] = int(last_eval_summary.get("total_steps", 0))
             row.update(_extract_env_metrics(last_eval_summary.get("last_episode_metrics"), "eval_"))
+            row.update(prefix_action_diagnostics(last_eval_summary.get("action_diagnostics"), "eval_", num_agents=num_agents))
 
         metrics_history.append(row)
         if not row["losses_finite"]:
@@ -193,7 +199,9 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
         "action_dim": 1056,
     }
     summary.update({key: last_metrics.get(key) for key in _prefixed_env_metric_names("rollout_")})
+    summary.update({key: last_metrics.get(key) for key in prefixed_action_diagnostic_keys("rollout_", num_agents=num_agents)})
     summary.update(_extract_env_metrics(last_eval_summary.get("last_episode_metrics"), "eval_"))
+    summary.update(prefix_action_diagnostics(last_eval_summary.get("action_diagnostics"), "eval_", num_agents=num_agents))
     return summary
 
 
