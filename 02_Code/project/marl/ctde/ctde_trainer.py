@@ -26,6 +26,9 @@ class CTDETrainer:
         entropy_coef: float = 0.0,
         device: str | torch.device | None = None,
         grad_clip_norm: float | None = None,
+        normalize_advantage: bool = False,
+        max_grad_norm: float | None = None,
+        advantage_norm_eps: float = 1.0e-8,
     ):
         self.actor = actor
         self.critic = critic
@@ -33,7 +36,15 @@ class CTDETrainer:
         self.critic_optimizer = critic_optimizer
         self.gamma = float(gamma)
         self.entropy_coef = float(entropy_coef)
-        self.grad_clip_norm = None if grad_clip_norm is None else float(grad_clip_norm)
+        configured_grad_norm = max_grad_norm if max_grad_norm is not None else grad_clip_norm
+        if configured_grad_norm is None:
+            self.max_grad_norm = None
+        else:
+            configured_grad_norm = float(configured_grad_norm)
+            self.max_grad_norm = configured_grad_norm if configured_grad_norm > 0.0 else None
+        self.grad_clip_norm = self.max_grad_norm
+        self.normalize_advantage = bool(normalize_advantage)
+        self.advantage_norm_eps = max(float(advantage_norm_eps), 1.0e-12)
         if device is None:
             try:
                 device = next(actor.parameters()).device
@@ -56,17 +67,21 @@ class CTDETrainer:
             target_v = rewards + self.gamma * (1.0 - dones) * next_values
         critic_loss = torch.nn.functional.mse_loss(values, target_v.detach())
         advantage = target_v.detach() - values.detach()
+        advantage_mean = advantage.mean()
+        advantage_std = advantage.std(unbiased=False)
+        advantage_for_actor = advantage
+        if self.normalize_advantage:
+            advantage_for_actor = (advantage - advantage_mean) / (advantage_std + self.advantage_norm_eps)
 
-        selected_log_probs, entropy = self._compute_action_log_probs(
+        selected_log_probs, entropy_metrics = self._compute_action_log_probs(
             tensors["obs"],
             tensors["movement_actions"],
             tensors["target_actions"],
             tensors["mode_actions"],
         )
         summed_log_probs = selected_log_probs.sum(dim=1)
-        actor_loss = -(advantage * summed_log_probs).mean()
-        if self.entropy_coef != 0.0:
-            actor_loss = actor_loss - self.entropy_coef * entropy.mean()
+        entropy_loss_component = -self.entropy_coef * entropy_metrics["policy_entropy_total"]
+        actor_loss = -(advantage_for_actor * summed_log_probs).mean() + entropy_loss_component
 
         return {
             "critic_loss": critic_loss,
@@ -75,10 +90,18 @@ class CTDETrainer:
             "mean_value": values.detach().mean(),
             "mean_target": target_v.detach().mean(),
             "mean_advantage": advantage.detach().mean(),
-            "mean_entropy": entropy.detach().mean(),
+            "advantage_mean": advantage_mean.detach(),
+            "advantage_std": advantage_std.detach(),
+            "advantage_abs_mean": advantage.detach().abs().mean(),
+            "mean_entropy": entropy_metrics["policy_entropy_total"].detach(),
+            "movement_entropy": entropy_metrics["movement_entropy"].detach(),
+            "target_entropy": entropy_metrics["target_entropy"].detach(),
+            "mode_entropy": entropy_metrics["mode_entropy"].detach(),
+            "policy_entropy_total": entropy_metrics["policy_entropy_total"].detach(),
+            "entropy_loss_component": entropy_loss_component.detach(),
         }
 
-    def update(self, batch: dict[str, Any]) -> dict[str, float]:
+    def update(self, batch: dict[str, Any]) -> dict[str, float | bool | None]:
         losses = self.compute_losses(batch)
 
         self.critic_optimizer.zero_grad(set_to_none=True)
@@ -97,9 +120,21 @@ class CTDETrainer:
             "mean_value": float(losses["mean_value"].detach().item()),
             "mean_target": float(losses["mean_target"].detach().item()),
             "mean_advantage": float(losses["mean_advantage"].detach().item()),
+            "advantage_mean": float(losses["advantage_mean"].detach().item()),
+            "advantage_std": float(losses["advantage_std"].detach().item()),
+            "advantage_abs_mean": float(losses["advantage_abs_mean"].detach().item()),
+            "advantage_normalized": bool(self.normalize_advantage),
             "mean_entropy": float(losses["mean_entropy"].detach().item()),
+            "movement_entropy": float(losses["movement_entropy"].detach().item()),
+            "target_entropy": float(losses["target_entropy"].detach().item()),
+            "mode_entropy": float(losses["mode_entropy"].detach().item()),
+            "policy_entropy_total": float(losses["policy_entropy_total"].detach().item()),
+            "entropy_coef": float(self.entropy_coef),
+            "entropy_loss_component": float(losses["entropy_loss_component"].detach().item()),
             "critic_grad_norm": float(critic_grad_norm),
             "actor_grad_norm": float(actor_grad_norm),
+            "max_grad_norm": None if self.max_grad_norm is None else float(self.max_grad_norm),
+            "grad_clipping_enabled": self.max_grad_norm is not None,
         }
 
     def _to_tensor_batch(self, batch: dict[str, Any]) -> dict[str, torch.Tensor]:
@@ -120,7 +155,7 @@ class CTDETrainer:
         movement_actions: torch.Tensor,
         target_actions: torch.Tensor,
         mode_actions: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         batch_size, num_agents, obs_dim = obs.shape
         flat_obs = obs.reshape(batch_size * num_agents, obs_dim)
         outputs = self.actor(flat_obs)
@@ -141,18 +176,22 @@ class CTDETrainer:
             + mode_log_probs.gather(1, flat_mode).squeeze(1)
         ).view(batch_size, num_agents)
 
-        entropy = (
-            torch.distributions.Categorical(logits=movement_logits).entropy()
-            + torch.distributions.Categorical(logits=target_logits).entropy()
-            + torch.distributions.Categorical(logits=mode_logits).entropy()
-        ).view(batch_size, num_agents)
-        return selected, entropy
+        movement_entropy = torch.distributions.Categorical(logits=movement_logits).entropy().view(batch_size, num_agents)
+        target_entropy = torch.distributions.Categorical(logits=target_logits).entropy().view(batch_size, num_agents)
+        mode_entropy = torch.distributions.Categorical(logits=mode_logits).entropy().view(batch_size, num_agents)
+        policy_entropy_total = movement_entropy + target_entropy + mode_entropy
+        return selected, {
+            "movement_entropy": movement_entropy.mean(),
+            "target_entropy": target_entropy.mean(),
+            "mode_entropy": mode_entropy.mean(),
+            "policy_entropy_total": policy_entropy_total.mean(),
+        }
 
     def _clip_grad_norm(self, parameters) -> float:
         params = [param for param in parameters if param.grad is not None]
         if not params:
             return 0.0
-        if self.grad_clip_norm is None:
+        if self.max_grad_norm is None:
             total = torch.norm(torch.stack([param.grad.detach().norm(2) for param in params]), 2)
             return float(total.item())
-        return float(torch.nn.utils.clip_grad_norm_(params, self.grad_clip_norm).item())
+        return float(torch.nn.utils.clip_grad_norm_(params, self.max_grad_norm).item())

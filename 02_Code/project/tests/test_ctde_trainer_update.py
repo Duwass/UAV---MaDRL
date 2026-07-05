@@ -159,8 +159,30 @@ def test_critic_loss_does_not_update_actor_when_backward_separate():
 def test_trainer_update_returns_float_metrics():
     trainer = _trainer()
     metrics = trainer.update(_fake_batch())
-    for value in metrics.values():
-        assert isinstance(value, float)
+    expected_float_keys = {
+        "critic_loss",
+        "actor_loss",
+        "mean_value",
+        "mean_target",
+        "mean_advantage",
+        "advantage_mean",
+        "advantage_std",
+        "advantage_abs_mean",
+        "mean_entropy",
+        "movement_entropy",
+        "target_entropy",
+        "mode_entropy",
+        "policy_entropy_total",
+        "entropy_coef",
+        "entropy_loss_component",
+        "critic_grad_norm",
+        "actor_grad_norm",
+    }
+    for key in expected_float_keys:
+        assert isinstance(metrics[key], float)
+    assert isinstance(metrics["advantage_normalized"], bool)
+    assert metrics["max_grad_norm"] is None or isinstance(metrics["max_grad_norm"], float)
+    assert isinstance(metrics["grad_clipping_enabled"], bool)
 
 
 def test_trainer_no_env_or_hierarchical_imports():

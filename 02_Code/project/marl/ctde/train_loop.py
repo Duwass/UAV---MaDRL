@@ -38,6 +38,23 @@ ENV_METRIC_KEYS: tuple[str, ...] = (
     "avg_uav_jammer_3d_distance",
     "altitude_boundary_hits",
 )
+TRAINING_DIAGNOSTIC_KEYS: tuple[str, ...] = (
+    "mean_entropy",
+    "movement_entropy",
+    "target_entropy",
+    "mode_entropy",
+    "policy_entropy_total",
+    "entropy_coef",
+    "entropy_loss_component",
+    "advantage_mean",
+    "advantage_std",
+    "advantage_abs_mean",
+    "advantage_normalized",
+    "actor_grad_norm",
+    "critic_grad_norm",
+    "max_grad_norm",
+    "grad_clipping_enabled",
+)
 
 
 def train_ctde_smoke(config: dict[str, Any] | str | Path | None = None) -> dict[str, Any]:
@@ -79,7 +96,8 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
         critic_optimizer=critic_optimizer,
         gamma=float(cfg.get("gamma", 0.99)),
         entropy_coef=float(cfg.get("entropy_coef", 0.0)),
-        grad_clip_norm=cfg.get("grad_clip_norm"),
+        max_grad_norm=_configured_max_grad_norm(cfg),
+        normalize_advantage=bool(cfg.get("normalize_advantage", False)),
     )
     buffer = CTDEReplayBuffer(int(cfg.get("replay_capacity", 128)), seed=seed)
 
@@ -127,6 +145,7 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
             "eval_mean_return": None,
             "eval_total_steps": 0,
         }
+        row.update({key: None for key in TRAINING_DIAGNOSTIC_KEYS})
         row.update(rollout_env_metrics)
         row.update(rollout_action_metrics)
         row.update(_extract_env_metrics(None, "eval_"))
@@ -136,15 +155,7 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
             continue
         batch = buffer.sample(min(batch_size, len(buffer)), rng=rng)
         update_metrics = trainer.update(batch)
-        row.update(
-            {
-                "actor_loss": _float_or_none(update_metrics.get("actor_loss")),
-                "critic_loss": _float_or_none(update_metrics.get("critic_loss")),
-                "mean_value": _float_or_none(update_metrics.get("mean_value")),
-                "mean_target": _float_or_none(update_metrics.get("mean_target")),
-                "mean_advantage": _float_or_none(update_metrics.get("mean_advantage")),
-            }
-        )
+        row.update({key: _metric_value_or_none(value) for key, value in update_metrics.items()})
         row["losses_finite"] = _metrics_are_finite(row, ("actor_loss", "critic_loss", "mean_value", "mean_target", "mean_advantage"))
         losses_finite = losses_finite and bool(row["losses_finite"])
 
@@ -200,6 +211,7 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
     }
     summary.update({key: last_metrics.get(key) for key in _prefixed_env_metric_names("rollout_")})
     summary.update({key: last_metrics.get(key) for key in prefixed_action_diagnostic_keys("rollout_", num_agents=num_agents)})
+    summary.update({key: last_metrics.get(key) for key in TRAINING_DIAGNOSTIC_KEYS})
     summary.update(_extract_env_metrics(last_eval_summary.get("last_episode_metrics"), "eval_"))
     summary.update(prefix_action_diagnostics(last_eval_summary.get("action_diagnostics"), "eval_", num_agents=num_agents))
     return summary
@@ -228,6 +240,24 @@ def _float_or_none(value: Any) -> float | None:
     if value is None:
         return None
     return float(value)
+
+
+def _metric_value_or_none(value: Any) -> float | bool | None:
+    if value is None:
+        return None
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    return float(value)
+
+
+def _configured_max_grad_norm(cfg: dict[str, Any]) -> float | None:
+    value = cfg.get("max_grad_norm")
+    if value is None:
+        value = cfg.get("grad_clip_norm")
+    if value is None:
+        return None
+    value = float(value)
+    return value if value > 0.0 else None
 
 
 def _metrics_are_finite(values: dict[str, Any], keys: tuple[str, ...]) -> bool:
