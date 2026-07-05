@@ -24,6 +24,7 @@ class DecentralizedActionSelection:
     flat_actions: list[int]
     movement_masks: np.ndarray | None
     raw_factorized_actions: list[FactorizedAction]
+    head_diagnostics: list[dict[str, Any]]
 
 
 def select_decentralized_actions(
@@ -32,6 +33,8 @@ def select_decentralized_actions(
     epsilon: float = 0.0,
     rng: np.random.Generator | None = None,
     use_movement_mask: bool = True,
+    selection_mode: str = "epsilon_argmax",
+    temperature: float = 1.0,
 ) -> DecentralizedActionSelection:
     """DE-safe action selection from local observations only.
 
@@ -48,6 +51,7 @@ def select_decentralized_actions(
     raw_factorized_actions: list[FactorizedAction] = []
     flat_actions: list[int] = []
     movement_masks: list[np.ndarray] = []
+    head_diagnostics: list[dict[str, Any]] = []
 
     for local_obs in obs_array:
         outputs = _actor_forward(actor, local_obs)
@@ -63,16 +67,25 @@ def select_decentralized_actions(
             movement_mask=movement_mask,
             epsilon=epsilon,
             rng=generator,
+            selection_mode=selection_mode,
+            temperature=temperature,
         )
         action = decision.action
         factorized_actions.append(action)
         flat_actions.append(encode_factorized_action(action))
         raw_factorized_actions.append(decision.raw_action)
+        head_diagnostics.append(dict(decision.head_diagnostics or {}))
         if movement_mask is not None:
             movement_masks.append(movement_mask)
 
     masks_array = np.stack(movement_masks) if use_movement_mask else None
-    return DecentralizedActionSelection(factorized_actions, flat_actions, masks_array, raw_factorized_actions)
+    return DecentralizedActionSelection(
+        factorized_actions,
+        flat_actions,
+        masks_array,
+        raw_factorized_actions,
+        head_diagnostics,
+    )
 
 
 def collect_ctde_rollout(
@@ -83,6 +96,8 @@ def collect_ctde_rollout(
     epsilon: float = 0.0,
     rng: np.random.Generator | None = None,
     use_movement_mask: bool = True,
+    selection_mode: str = "epsilon_argmax",
+    temperature: float = 1.0,
 ) -> dict[str, Any]:
     """Collect a short rollout while storing global state only for training data.
 
@@ -101,6 +116,7 @@ def collect_ctde_rollout(
     num_agents = int(np.asarray(observations).shape[0])
     selected_actions: list[FactorizedAction] = []
     raw_actions: list[FactorizedAction] = []
+    head_diagnostics: list[dict[str, Any]] = []
     agent_ids: list[int] = []
 
     while transitions_collected < step_limit and not (terminated or truncated):
@@ -110,9 +126,12 @@ def collect_ctde_rollout(
             epsilon=epsilon,
             rng=rng,
             use_movement_mask=use_movement_mask,
+            selection_mode=selection_mode,
+            temperature=temperature,
         )
         selected_actions.extend(selection.factorized_actions)
         raw_actions.extend(selection.raw_factorized_actions)
+        head_diagnostics.extend(selection.head_diagnostics)
         agent_ids.extend(range(len(selection.factorized_actions)))
         next_observations, reward, terminated, truncated, next_info = env.step(selection.flat_actions)
         next_state = _global_state_from_env_or_info(env, next_info)
@@ -143,10 +162,12 @@ def collect_ctde_rollout(
     action_diagnostics = summarize_action_diagnostics(
         selected_actions,
         raw_actions=raw_actions,
+        head_diagnostics=head_diagnostics,
         agent_ids=agent_ids,
         num_agents=num_agents,
-        deterministic=float(epsilon) <= 0.0,
+        deterministic=float(epsilon) <= 0.0 and str(selection_mode) != "stochastic",
         epsilon=float(epsilon),
+        selection_mode=str(selection_mode),
         movement_count=DEFAULT_NUM_MOVEMENT_ACTIONS,
         target_count=DEFAULT_NUM_TARGETS,
         mode_count=DEFAULT_NUM_MODES,

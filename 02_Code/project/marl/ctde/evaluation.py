@@ -16,6 +16,10 @@ def evaluate_decentralized_policy(
     max_steps: int | None = None,
     use_movement_mask: bool = True,
     deterministic: bool = True,
+    epsilon: float | None = None,
+    selection_mode: str = "epsilon_argmax",
+    diagnostic_prefix: str = "eval_",
+    temperature: float = 1.0,
     rng: np.random.Generator | None = None,
 ) -> dict[str, Any]:
     """Run a decentralized execution smoke/evaluation path.
@@ -34,8 +38,12 @@ def evaluate_decentralized_policy(
     truncated_count = 0
     selected_actions: list[FactorizedAction] = []
     raw_actions: list[FactorizedAction] = []
+    head_diagnostics: list[dict[str, Any]] = []
     agent_ids: list[int] = []
     num_agents = 0
+    policy_epsilon = 0.0 if deterministic else 1.0
+    if epsilon is not None:
+        policy_epsilon = float(epsilon)
 
     for _ in range(int(num_episodes)):
         observations, _ = env.reset()
@@ -52,12 +60,15 @@ def evaluate_decentralized_policy(
             selection = select_decentralized_actions(
                 actor,
                 observations,
-                epsilon=0.0 if deterministic else 1.0,
+                epsilon=policy_epsilon,
                 rng=generator,
                 use_movement_mask=use_movement_mask,
+                selection_mode=selection_mode,
+                temperature=temperature,
             )
             selected_actions.extend(selection.factorized_actions)
             raw_actions.extend(selection.raw_factorized_actions)
+            head_diagnostics.extend(selection.head_diagnostics)
             agent_ids.extend(range(len(selection.factorized_actions)))
             observations, reward, terminated, truncated, info = env.step(selection.flat_actions)
             episode_return += float(reward)
@@ -76,13 +87,20 @@ def evaluate_decentralized_policy(
     action_diagnostics = summarize_action_diagnostics(
         selected_actions,
         raw_actions=raw_actions,
+        head_diagnostics=head_diagnostics,
         agent_ids=agent_ids,
         num_agents=num_agents,
-        deterministic=bool(deterministic),
-        epsilon=0.0 if deterministic else 1.0,
+        deterministic=bool(deterministic and policy_epsilon <= 0.0 and str(selection_mode) != "stochastic"),
+        epsilon=policy_epsilon,
+        selection_mode=str(selection_mode),
         movement_count=DEFAULT_NUM_MOVEMENT_ACTIONS,
         target_count=DEFAULT_NUM_TARGETS,
         mode_count=DEFAULT_NUM_MODES,
+    )
+    prefixed_action_diagnostics = prefix_action_diagnostics(
+        action_diagnostics,
+        diagnostic_prefix,
+        num_agents=max(num_agents, 1),
     )
     return {
         "episodes": int(num_episodes),
@@ -97,5 +115,6 @@ def evaluate_decentralized_policy(
         "last_episode_metrics": episode_metrics[-1] if episode_metrics else {},
         "last_frame_metrics": frame_metrics[-1] if frame_metrics else {},
         "action_diagnostics": action_diagnostics,
-        "eval_action_diagnostics": prefix_action_diagnostics(action_diagnostics, "eval_", num_agents=max(num_agents, 1)),
+        f"{diagnostic_prefix}action_diagnostics": prefixed_action_diagnostics,
+        "eval_action_diagnostics": prefixed_action_diagnostics if diagnostic_prefix == "eval_" else {},
     }

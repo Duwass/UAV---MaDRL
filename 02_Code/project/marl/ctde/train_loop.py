@@ -109,6 +109,12 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
     eval_every = int(smoke_cfg.get("eval_every", 0))
     eval_episodes = int(smoke_cfg.get("eval_episodes", 1))
     eval_max_steps = int(smoke_cfg.get("eval_max_steps", 5))
+    evaluation_cfg = dict(cfg.get("evaluation", {}))
+    diagnostic_stochastic_eval = bool(evaluation_cfg.get("diagnostic_stochastic_eval", False))
+    diagnostic_stochastic_episodes = int(evaluation_cfg.get("diagnostic_stochastic_episodes", eval_episodes))
+    diagnostic_epsilon_eval = bool(evaluation_cfg.get("diagnostic_epsilon_eval", False))
+    diagnostic_epsilon = float(evaluation_cfg.get("diagnostic_epsilon", 0.05))
+    diagnostic_epsilon_episodes = int(evaluation_cfg.get("diagnostic_epsilon_episodes", eval_episodes))
 
     metrics_history: list[dict[str, float]] = []
     transitions_collected = 0
@@ -116,6 +122,8 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
     stopped_early = False
     warning: str | None = None
     last_eval_summary: dict[str, Any] = {}
+    last_diag_stoch_eval_summary: dict[str, Any] = {}
+    last_diag_epsilon_eval_summary: dict[str, Any] = {}
     for iteration in range(1, num_iterations + 1):
         rollout_summary = collect_ctde_rollout(
             env,
@@ -173,6 +181,36 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
             row["eval_total_steps"] = int(last_eval_summary.get("total_steps", 0))
             row.update(_extract_env_metrics(last_eval_summary.get("last_episode_metrics"), "eval_"))
             row.update(prefix_action_diagnostics(last_eval_summary.get("action_diagnostics"), "eval_", num_agents=num_agents))
+            if diagnostic_stochastic_eval and diagnostic_stochastic_episodes > 0:
+                last_diag_stoch_eval_summary = evaluate_decentralized_policy(
+                    env,
+                    actor,
+                    num_episodes=diagnostic_stochastic_episodes,
+                    max_steps=eval_max_steps,
+                    deterministic=False,
+                    epsilon=0.0,
+                    selection_mode="stochastic",
+                    diagnostic_prefix="diag_stoch_eval_",
+                    rng=np.random.default_rng(seed * 100000 + iteration * 10 + 1),
+                )
+                row.update(_prefixed_eval_summary_fields(last_diag_stoch_eval_summary, "diag_stoch_eval_"))
+                row.update(_extract_env_metrics(last_diag_stoch_eval_summary.get("last_episode_metrics"), "diag_stoch_eval_"))
+                row.update(prefix_action_diagnostics(last_diag_stoch_eval_summary.get("action_diagnostics"), "diag_stoch_eval_", num_agents=num_agents))
+            if diagnostic_epsilon_eval and diagnostic_epsilon_episodes > 0:
+                last_diag_epsilon_eval_summary = evaluate_decentralized_policy(
+                    env,
+                    actor,
+                    num_episodes=diagnostic_epsilon_episodes,
+                    max_steps=eval_max_steps,
+                    deterministic=False,
+                    epsilon=diagnostic_epsilon,
+                    selection_mode="epsilon_argmax",
+                    diagnostic_prefix="diag_epsilon_eval_",
+                    rng=np.random.default_rng(seed * 100000 + iteration * 10 + 2),
+                )
+                row.update(_prefixed_eval_summary_fields(last_diag_epsilon_eval_summary, "diag_epsilon_eval_"))
+                row.update(_extract_env_metrics(last_diag_epsilon_eval_summary.get("last_episode_metrics"), "diag_epsilon_eval_"))
+                row.update(prefix_action_diagnostics(last_diag_epsilon_eval_summary.get("action_diagnostics"), "diag_epsilon_eval_", num_agents=num_agents))
 
         metrics_history.append(row)
         if not row["losses_finite"]:
@@ -214,6 +252,14 @@ def train_ctde_short_run(config: dict[str, Any] | str | Path | None = None) -> d
     summary.update({key: last_metrics.get(key) for key in TRAINING_DIAGNOSTIC_KEYS})
     summary.update(_extract_env_metrics(last_eval_summary.get("last_episode_metrics"), "eval_"))
     summary.update(prefix_action_diagnostics(last_eval_summary.get("action_diagnostics"), "eval_", num_agents=num_agents))
+    if last_diag_stoch_eval_summary:
+        summary.update(_prefixed_eval_summary_fields(last_diag_stoch_eval_summary, "diag_stoch_eval_"))
+        summary.update(_extract_env_metrics(last_diag_stoch_eval_summary.get("last_episode_metrics"), "diag_stoch_eval_"))
+        summary.update(prefix_action_diagnostics(last_diag_stoch_eval_summary.get("action_diagnostics"), "diag_stoch_eval_", num_agents=num_agents))
+    if last_diag_epsilon_eval_summary:
+        summary.update(_prefixed_eval_summary_fields(last_diag_epsilon_eval_summary, "diag_epsilon_eval_"))
+        summary.update(_extract_env_metrics(last_diag_epsilon_eval_summary.get("last_episode_metrics"), "diag_epsilon_eval_"))
+        summary.update(prefix_action_diagnostics(last_diag_epsilon_eval_summary.get("action_diagnostics"), "diag_epsilon_eval_", num_agents=num_agents))
     return summary
 
 
@@ -266,6 +312,13 @@ def _metrics_are_finite(values: dict[str, Any], keys: tuple[str, ...]) -> bool:
 
 def _prefixed_env_metric_names(prefix: str) -> tuple[str, ...]:
     return tuple(f"{prefix}{key}" for key in ENV_METRIC_KEYS)
+
+
+def _prefixed_eval_summary_fields(source: dict[str, Any], prefix: str) -> dict[str, float | int | None]:
+    return {
+        f"{prefix}mean_return": _safe_float_or_none(source.get("mean_return")),
+        f"{prefix}total_steps": int(source.get("total_steps", 0)) if source else 0,
+    }
 
 
 def _extract_env_metrics(source: Any, prefix: str) -> dict[str, float | None]:
